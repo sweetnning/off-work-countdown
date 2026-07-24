@@ -29,7 +29,6 @@
     hours: document.querySelector("#hours"),
     minutes: document.querySelector("#minutes"),
     seconds: document.querySelector("#seconds"),
-    currentTime: document.querySelector("#currentTime"),
     clockInButton: document.querySelector("#clockInButton"),
     clockOutButton: document.querySelector("#clockOutButton"),
     clockInLabel: document.querySelector("#clockInLabel"),
@@ -54,10 +53,13 @@
     exportButton: document.querySelector("#exportButton"),
     importInput: document.querySelector("#importInput"),
     clearButton: document.querySelector("#clearButton"),
-    clockInDialog: document.querySelector("#clockInDialog"),
-    clockInTimeInput: document.querySelector("#clockInTimeInput"),
-    cancelClockInEdit: document.querySelector("#cancelClockInEdit"),
-    saveClockInEdit: document.querySelector("#saveClockInEdit"),
+    timeEditDialog: document.querySelector("#timeEditDialog"),
+    timeEditDialogTitle: document.querySelector("#timeEditDialogTitle"),
+    timeEditHelp: document.querySelector("#timeEditHelp"),
+    timeEditLabel: document.querySelector("#timeEditLabel"),
+    timeEditInput: document.querySelector("#timeEditInput"),
+    cancelTimeEdit: document.querySelector("#cancelTimeEdit"),
+    saveTimeEdit: document.querySelector("#saveTimeEdit"),
     celebrationLayer: document.querySelector("#celebrationLayer"),
     toast: document.querySelector("#toast")
   };
@@ -67,6 +69,8 @@
   let selectedDateKey = getDateKey(new Date());
   let toastTimer = 0;
   let lastRenderedDate = selectedDateKey;
+  let editMode = "clockIn";
+  const tapTimers = { clockIn: 0, clockOut: 0 };
 
   function loadState() {
     try {
@@ -105,13 +109,9 @@
     return state.records[dateKey];
   }
 
-  function defaultRestFor(date) {
-    return date.getDay() === 1;
-  }
-
   function isRestDay(date, dateKey = getDateKey(date)) {
     const record = getRecord(dateKey);
-    return typeof record.restOverride === "boolean" ? record.restOverride : defaultRestFor(date);
+    return record.restOverride === true;
   }
 
   function formatDateLong(date) {
@@ -185,13 +185,6 @@
     }
 
     elements.dateLabel.textContent = formatDateLong(now);
-    elements.currentTime.textContent = new Intl.DateTimeFormat("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false
-    }).format(now);
-
     const target = new Date(now);
     target.setHours(END_HOUR, END_MINUTE, 0, 0);
     const remaining = Math.max(0, target - now);
@@ -236,10 +229,12 @@
     elements.durationValue.textContent = formatDuration(workedMinutes);
 
     elements.clockInButton.disabled = rest;
-    elements.clockOutButton.disabled = rest || !record.clockIn || Boolean(record.clockOut);
-    elements.clockInLabel.textContent = record.clockIn ? "修改上班时间" : "上班打卡";
+    elements.clockOutButton.disabled = rest || !record.clockIn;
+    elements.clockInLabel.textContent = "上班打卡";
     elements.clockInHint.textContent = record.clockIn ? formatClock(record.clockIn) : rest ? "休息日无需打卡" : "记录这一刻";
     elements.clockOutHint.textContent = record.clockOut ? formatClock(record.clockOut) : !record.clockIn ? "上班后解锁" : "结束今天工作";
+    elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；单击取消，双击修改` : "上班打卡");
+    elements.clockOutButton.setAttribute("aria-label", record.clockOut ? `下班打卡时间 ${formatClock(record.clockOut)}；单击取消，双击修改` : "下班打卡");
 
     updateMonthCounts(now);
   }
@@ -252,9 +247,10 @@
     const now = new Date();
     const dateKey = getDateKey(now);
     const record = ensureRecord(dateKey);
-    record.restOverride = !isRestDay(now, dateKey);
+    if (isRestDay(now, dateKey)) delete record.restOverride;
+    else record.restOverride = true;
     saveState();
-    showToast(record.restOverride ? "今天切换为休息日" : "今天切换为工作日");
+    showToast(record.restOverride ? "今天已标记为休息日" : "已恢复为工作日");
     renderToday(now);
     renderCalendar();
   }
@@ -273,27 +269,35 @@
     renderCalendar();
   }
 
-  function openClockInEditor() {
+  function openTimeEditor(mode) {
     const { record, rest } = getTodayContext();
-    if (rest || !record.clockIn) return;
-    const clockInDate = new Date(record.clockIn);
-    elements.clockInTimeInput.value = `${String(clockInDate.getHours()).padStart(2, "0")}:${String(clockInDate.getMinutes()).padStart(2, "0")}`;
-    if (typeof elements.clockInDialog.showModal === "function") {
-      elements.clockInDialog.showModal();
+    const value = record[mode];
+    if (rest || !value) return;
+    editMode = mode;
+    const editingClockIn = mode === "clockIn";
+    const punchDate = new Date(value);
+    elements.timeEditDialogTitle.textContent = editingClockIn ? "修改上班时间" : "修改下班时间";
+    elements.timeEditHelp.textContent = editingClockIn
+      ? "选择今天真正开始工作的时间，今日工作时长会自动更新。"
+      : "选择今天真正结束工作的时间，今日工作时长会自动更新。";
+    elements.timeEditLabel.textContent = editingClockIn ? "今天几点开始工作？" : "今天几点结束工作？";
+    elements.timeEditInput.value = `${String(punchDate.getHours()).padStart(2, "0")}:${String(punchDate.getMinutes()).padStart(2, "0")}`;
+    if (typeof elements.timeEditDialog.showModal === "function") {
+      elements.timeEditDialog.showModal();
     } else {
-      elements.clockInDialog.setAttribute("open", "");
+      elements.timeEditDialog.setAttribute("open", "");
     }
   }
 
-  function closeClockInEditor() {
-    if (typeof elements.clockInDialog.close === "function") elements.clockInDialog.close();
-    else elements.clockInDialog.removeAttribute("open");
+  function closeTimeEditor() {
+    if (typeof elements.timeEditDialog.close === "function") elements.timeEditDialog.close();
+    else elements.timeEditDialog.removeAttribute("open");
   }
 
-  function saveClockInTime() {
-    const value = elements.clockInTimeInput.value;
+  function saveEditedTime() {
+    const value = elements.timeEditInput.value;
     if (!/^\d{2}:\d{2}$/.test(value)) {
-      showToast("请先选择上班时间");
+      showToast("请先选择打卡时间");
       return;
     }
 
@@ -301,31 +305,70 @@
     const dateKey = getDateKey(now);
     const record = ensureRecord(dateKey);
     const [hours, minutes] = value.split(":").map(Number);
-    const revisedClockIn = new Date(now);
-    revisedClockIn.setHours(hours, minutes, 0, 0);
+    const revisedTime = new Date(now);
+    revisedTime.setHours(hours, minutes, 0, 0);
 
-    if (revisedClockIn > now) {
-      showToast("上班时间不能晚于现在");
+    if (revisedTime > now) {
+      showToast("打卡时间不能晚于现在");
       return;
     }
-    if (record.clockOut && revisedClockIn >= new Date(record.clockOut)) {
+    if (editMode === "clockIn" && record.clockOut && revisedTime >= new Date(record.clockOut)) {
       showToast("上班时间需要早于下班时间");
       return;
     }
+    if (editMode === "clockOut" && record.clockIn && revisedTime <= new Date(record.clockIn)) {
+      showToast("下班时间需要晚于上班时间");
+      return;
+    }
 
-    record.clockIn = revisedClockIn.toISOString();
+    record[editMode] = revisedTime.toISOString();
     if (record.clockOut) record.workedMinutes = calculateWorkedMinutes(record);
     saveState();
-    closeClockInEditor();
+    closeTimeEditor();
     renderToday(now);
     renderCalendar();
-    showToast(`上班时间已修改为 ${formatClock(record.clockIn).slice(0, 5)}`);
+    showToast(`${editMode === "clockIn" ? "上班" : "下班"}时间已修改为 ${formatClock(record[editMode]).slice(0, 5)}`);
   }
 
-  function handleClockInAction() {
+  function cancelPunch(mode) {
+    const { dateKey, record } = getTodayContext();
+    if (!record[mode]) return;
+    const label = mode === "clockIn" ? "上班" : "下班";
+    const extra = mode === "clockIn" && record.clockOut ? "，下班打卡也会一并取消" : "";
+    if (!window.confirm(`确定取消今天的${label}打卡吗${extra}？`)) return;
+    const target = ensureRecord(dateKey);
+    if (mode === "clockIn") {
+      delete target.clockIn;
+      delete target.clockOut;
+    } else {
+      delete target.clockOut;
+    }
+    delete target.workedMinutes;
+    saveState();
+    renderToday();
+    renderCalendar();
+    showToast(`${label}打卡已取消`);
+  }
+
+  function handlePunchAction(mode) {
     const { record } = getTodayContext();
-    if (record.clockIn) openClockInEditor();
-    else clockIn();
+    if (!record[mode]) {
+      if (mode === "clockIn") clockIn();
+      else clockOut();
+      return;
+    }
+
+    if (tapTimers[mode]) {
+      window.clearTimeout(tapTimers[mode]);
+      tapTimers[mode] = 0;
+      openTimeEditor(mode);
+      return;
+    }
+
+    tapTimers[mode] = window.setTimeout(() => {
+      tapTimers[mode] = 0;
+      cancelPunch(mode);
+    }, 280);
   }
 
   function clockOut() {
@@ -403,7 +446,9 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "calendar-day";
-      button.textContent = String(day);
+      const number = document.createElement("span");
+      number.textContent = String(day);
+      button.append(number);
       button.dataset.date = dateKey;
       button.setAttribute("role", "gridcell");
       button.setAttribute("aria-label", `${month + 1}月${day}日${record.clockIn ? "，已上班打卡" : rest ? "，休息日" : "，无记录"}`);
@@ -514,38 +559,41 @@
     showToast("本机打卡数据已清空");
   }
 
-  elements.themeButton.addEventListener("click", () => {
+  elements.themeButton?.addEventListener("click", () => {
     updateTheme(elements.body.dataset.theme === "cozy" ? "minimal" : "cozy");
   });
-  elements.calendarButton.addEventListener("click", openCalendar);
-  elements.closeCalendar.addEventListener("click", closeCalendar);
-  elements.calendarDialog.addEventListener("click", (event) => {
+  elements.calendarButton?.addEventListener("click", openCalendar);
+  elements.closeCalendar?.addEventListener("click", closeCalendar);
+  elements.calendarDialog?.addEventListener("click", (event) => {
     if (event.target === elements.calendarDialog) closeCalendar();
   });
-  elements.prevMonth.addEventListener("click", () => {
+  elements.prevMonth?.addEventListener("click", () => {
     calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() - 1, 1);
     selectedDateKey = getDateKey(calendarCursor);
     renderCalendar();
   });
-  elements.nextMonth.addEventListener("click", () => {
+  elements.nextMonth?.addEventListener("click", () => {
     calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 1);
     selectedDateKey = getDateKey(calendarCursor);
     renderCalendar();
   });
-  elements.dayToggle.addEventListener("click", toggleRestDay);
-  elements.clockInButton.addEventListener("click", handleClockInAction);
-  elements.clockOutButton.addEventListener("click", clockOut);
-  elements.cancelClockInEdit.addEventListener("click", closeClockInEditor);
-  elements.saveClockInEdit.addEventListener("click", saveClockInTime);
-  elements.clockInDialog.addEventListener("click", (event) => {
-    if (event.target === elements.clockInDialog) closeClockInEditor();
+  elements.dayToggle?.addEventListener("click", toggleRestDay);
+  elements.clockInButton?.addEventListener("click", () => handlePunchAction("clockIn"));
+  elements.clockOutButton?.addEventListener("click", () => handlePunchAction("clockOut"));
+  elements.clockInButton?.addEventListener("dblclick", (event) => event.preventDefault());
+  elements.clockOutButton?.addEventListener("dblclick", (event) => event.preventDefault());
+  elements.cancelTimeEdit?.addEventListener("click", closeTimeEditor);
+  elements.saveTimeEdit?.addEventListener("click", saveEditedTime);
+  elements.timeEditDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.timeEditDialog) closeTimeEditor();
   });
-  elements.exportButton.addEventListener("click", exportData);
-  elements.importInput.addEventListener("change", importData);
-  elements.clearButton.addEventListener("click", clearData);
+  elements.exportButton?.addEventListener("click", exportData);
+  elements.importInput?.addEventListener("change", importData);
+  elements.clearButton?.addEventListener("click", clearData);
 
   updateTheme(localStorage.getItem(THEME_KEY) || "minimal", false);
   renderToday();
   renderCalendar();
+  document.body.dataset.ready = "true";
   window.setInterval(() => renderToday(), 1000);
 })();

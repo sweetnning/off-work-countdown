@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#fffaf7">
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
-  <link rel="icon" href="assets/brand-pudding.png" type="image/png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="assets/brand-pudding.png?v=4" type="image/png">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body data-theme="minimal">
   <!--
@@ -24,7 +24,7 @@
     <header class="topbar">
       <a class="brand" href="#main" aria-label="返回倒计时">
         <span class="brand-mark" aria-hidden="true">
-          <img src="assets/brand-pudding.png" alt="">
+          <img src="assets/brand-pudding.png?v=4" alt="" width="47" height="47">
         </span>
         <span>
           <strong>下班倒计时</strong>
@@ -78,15 +78,13 @@
             </div>
           </div>
 
-          <p class="current-time">现在是 <time id="currentTime">--:--:--</time><span class="time-divider">·</span>18:00 下班</p>
-
           <div class="punch-panel" aria-label="今日打卡">
             <div class="punch-actions">
-              <button class="punch-button punch-in" id="clockInButton" type="button">
+              <button class="punch-button punch-in" id="clockInButton" type="button" aria-label="上班打卡">
                 <span class="punch-symbol" aria-hidden="true">上</span>
                 <span><strong id="clockInLabel">上班打卡</strong><small id="clockInHint">记录这一刻</small></span>
               </button>
-              <button class="punch-button punch-out" id="clockOutButton" type="button">
+              <button class="punch-button punch-out" id="clockOutButton" type="button" aria-label="下班打卡">
                 <span class="punch-symbol" aria-hidden="true">下</span>
                 <span><strong>下班打卡</strong><small id="clockOutHint">完成后解锁</small></span>
               </button>
@@ -140,7 +138,7 @@
       <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="打卡月历"></div>
 
       <div class="selected-day" id="selectedDayPanel">
-        <img src="assets/record-pencil.png" alt="记录贴图">
+        <img src="assets/record-pencil.png" alt="记录贴图" loading="lazy" decoding="async">
         <div>
           <span id="selectedDateLabel">选择一个日期</span>
           <strong id="selectedDateStatus">查看当天记录</strong>
@@ -157,23 +155,32 @@
     </div>
   </dialog>
 
-  <dialog class="time-edit-dialog" id="clockInDialog" aria-labelledby="clockInDialogTitle">
+  <dialog class="time-edit-dialog" id="timeEditDialog" aria-labelledby="timeEditDialogTitle">
     <div class="time-edit-shell">
       <p class="dialog-kicker">补录实际时间</p>
-      <h2 id="clockInDialogTitle">修改上班时间</h2>
-      <p class="time-edit-help">选择今天真正开始工作的时间，下班后的工作时长也会自动更新。</p>
-      <label for="clockInTimeInput">今天几点开始工作？</label>
-      <input id="clockInTimeInput" type="time" step="60" required>
+      <h2 id="timeEditDialogTitle">修改打卡时间</h2>
+      <p class="time-edit-help" id="timeEditHelp">选择实际打卡时间，今日工作时长会自动更新。</p>
+      <label for="timeEditInput" id="timeEditLabel">打卡时间</label>
+      <input id="timeEditInput" type="time" step="60" required>
       <div class="time-edit-actions">
-        <button id="cancelClockInEdit" type="button">取消</button>
-        <button class="save-time-button" id="saveClockInEdit" type="button">保存时间</button>
+        <button id="cancelTimeEdit" type="button">取消</button>
+        <button class="save-time-button" id="saveTimeEdit" type="button">保存时间</button>
       </div>
     </div>
   </dialog>
 
   <div class="celebration-layer" id="celebrationLayer" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="load-error" id="loadError" role="alert" hidden>
+    <strong>页面刚刚更新，请刷新一下</strong>
+    <button type="button" onclick="location.reload()">重新加载</button>
+  </div>
 
-  <script src="app.js"></script>
+  <script>
+    window.setTimeout(() => {
+      if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
+    }, 4000);
+  </script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
