@@ -84,7 +84,7 @@
             <div class="punch-actions">
               <button class="punch-button punch-in" id="clockInButton" type="button">
                 <span class="punch-symbol" aria-hidden="true">上</span>
-                <span><strong>上班打卡</strong><small id="clockInHint">记录这一刻</small></span>
+                <span><strong id="clockInLabel">上班打卡</strong><small id="clockInHint">记录这一刻</small></span>
               </button>
               <button class="punch-button punch-out" id="clockOutButton" type="button">
                 <span class="punch-symbol" aria-hidden="true">下</span>
@@ -153,6 +153,20 @@
         <label class="import-label" for="importInput">导入备份</label>
         <input id="importInput" type="file" accept="application/json,.json">
         <button class="danger-button" id="clearButton" type="button">清空本机数据</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="time-edit-dialog" id="clockInDialog" aria-labelledby="clockInDialogTitle">
+    <div class="time-edit-shell">
+      <p class="dialog-kicker">补录实际时间</p>
+      <h2 id="clockInDialogTitle">修改上班时间</h2>
+      <p class="time-edit-help">选择今天真正开始工作的时间，下班后的工作时长也会自动更新。</p>
+      <label for="clockInTimeInput">今天几点开始工作？</label>
+      <input id="clockInTimeInput" type="time" step="60" required>
+      <div class="time-edit-actions">
+        <button id="cancelClockInEdit" type="button">取消</button>
+        <button class="save-time-button" id="saveClockInEdit" type="button">保存时间</button>
       </div>
     </div>
   </dialog>

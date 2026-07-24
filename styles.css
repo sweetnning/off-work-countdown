@@ -256,10 +256,27 @@ a:focus-visible {
 }
 
 .date-label {
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px solid color-mix(in srgb, var(--yellow) 74%, var(--line));
+  border-radius: 13px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--yellow) 35%, var(--surface-solid));
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.05em;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--yellow) 18%, transparent);
+}
+
+.date-label::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .day-toggle {
@@ -608,6 +625,92 @@ h1 {
 
 .calendar-dialog[open] {
   animation: dialog-in 240ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.time-edit-dialog {
+  width: min(430px, calc(100% - 28px));
+  padding: 0;
+  border: 0;
+  border-radius: 27px;
+  color: var(--text);
+  background: var(--surface-solid);
+  box-shadow: 0 36px 100px rgba(35, 28, 24, 0.26);
+}
+
+.time-edit-dialog::backdrop {
+  background: rgba(39, 34, 31, 0.34);
+  backdrop-filter: blur(6px);
+}
+
+.time-edit-dialog[open] {
+  animation: dialog-in 220ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.time-edit-shell {
+  padding: 32px;
+}
+
+.time-edit-shell h2 {
+  margin: 7px 0 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+}
+
+.time-edit-help {
+  margin: 13px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-wrap: pretty;
+}
+
+.time-edit-shell label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.time-edit-shell input[type="time"] {
+  display: block;
+  width: 100%;
+  margin-top: 9px;
+  padding: 15px 17px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  background: var(--bg);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-edit-shell input[type="time"]:focus {
+  border-color: var(--accent);
+  outline: 3px solid color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.time-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.time-edit-actions button {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  background: transparent;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.time-edit-actions .save-time-button {
+  color: var(--accent-ink);
+  border-color: transparent;
+  background: var(--accent-soft);
 }
 
 .dialog-shell {
@@ -967,7 +1070,14 @@ body.is-complete .hero {
   }
 
   .date-label {
+    gap: 6px;
+    padding: 7px 10px;
     font-size: 12px;
+  }
+
+  .date-label::before {
+    width: 6px;
+    height: 6px;
   }
 
   .day-toggle {
@@ -1060,6 +1170,10 @@ body.is-complete .hero {
     width: calc(100% - 14px);
     max-height: calc(100vh - 14px);
     border-radius: 24px;
+  }
+
+  .time-edit-shell {
+    padding: 26px 21px;
   }
 
   .dialog-shell {

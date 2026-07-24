@@ -32,6 +32,7 @@
     currentTime: document.querySelector("#currentTime"),
     clockInButton: document.querySelector("#clockInButton"),
     clockOutButton: document.querySelector("#clockOutButton"),
+    clockInLabel: document.querySelector("#clockInLabel"),
     clockInHint: document.querySelector("#clockInHint"),
     clockOutHint: document.querySelector("#clockOutHint"),
     clockInValue: document.querySelector("#clockInValue"),
@@ -53,6 +54,10 @@
     exportButton: document.querySelector("#exportButton"),
     importInput: document.querySelector("#importInput"),
     clearButton: document.querySelector("#clearButton"),
+    clockInDialog: document.querySelector("#clockInDialog"),
+    clockInTimeInput: document.querySelector("#clockInTimeInput"),
+    cancelClockInEdit: document.querySelector("#cancelClockInEdit"),
+    saveClockInEdit: document.querySelector("#saveClockInEdit"),
     celebrationLayer: document.querySelector("#celebrationLayer"),
     toast: document.querySelector("#toast")
   };
@@ -218,7 +223,7 @@
     } else if (record.clockIn) {
       elements.overline.textContent = "距离下班还有";
       elements.heroTitle.textContent = "稳稳度过今天";
-      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "已经在路上啦");
+      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "You can do it！");
     } else {
       elements.overline.textContent = "距离下班还有";
       elements.heroTitle.textContent = "准备好就出发";
@@ -230,8 +235,9 @@
     const workedMinutes = record.workedMinutes ?? calculateWorkedMinutes(record);
     elements.durationValue.textContent = formatDuration(workedMinutes);
 
-    elements.clockInButton.disabled = rest || Boolean(record.clockIn);
+    elements.clockInButton.disabled = rest;
     elements.clockOutButton.disabled = rest || !record.clockIn || Boolean(record.clockOut);
+    elements.clockInLabel.textContent = record.clockIn ? "修改上班时间" : "上班打卡";
     elements.clockInHint.textContent = record.clockIn ? formatClock(record.clockIn) : rest ? "休息日无需打卡" : "记录这一刻";
     elements.clockOutHint.textContent = record.clockOut ? formatClock(record.clockOut) : !record.clockIn ? "上班后解锁" : "结束今天工作";
 
@@ -265,6 +271,61 @@
     showToast(`上班打卡成功 · ${formatClock(target.clockIn)}`);
     renderToday(now);
     renderCalendar();
+  }
+
+  function openClockInEditor() {
+    const { record, rest } = getTodayContext();
+    if (rest || !record.clockIn) return;
+    const clockInDate = new Date(record.clockIn);
+    elements.clockInTimeInput.value = `${String(clockInDate.getHours()).padStart(2, "0")}:${String(clockInDate.getMinutes()).padStart(2, "0")}`;
+    if (typeof elements.clockInDialog.showModal === "function") {
+      elements.clockInDialog.showModal();
+    } else {
+      elements.clockInDialog.setAttribute("open", "");
+    }
+  }
+
+  function closeClockInEditor() {
+    if (typeof elements.clockInDialog.close === "function") elements.clockInDialog.close();
+    else elements.clockInDialog.removeAttribute("open");
+  }
+
+  function saveClockInTime() {
+    const value = elements.clockInTimeInput.value;
+    if (!/^\d{2}:\d{2}$/.test(value)) {
+      showToast("请先选择上班时间");
+      return;
+    }
+
+    const now = new Date();
+    const dateKey = getDateKey(now);
+    const record = ensureRecord(dateKey);
+    const [hours, minutes] = value.split(":").map(Number);
+    const revisedClockIn = new Date(now);
+    revisedClockIn.setHours(hours, minutes, 0, 0);
+
+    if (revisedClockIn > now) {
+      showToast("上班时间不能晚于现在");
+      return;
+    }
+    if (record.clockOut && revisedClockIn >= new Date(record.clockOut)) {
+      showToast("上班时间需要早于下班时间");
+      return;
+    }
+
+    record.clockIn = revisedClockIn.toISOString();
+    if (record.clockOut) record.workedMinutes = calculateWorkedMinutes(record);
+    saveState();
+    closeClockInEditor();
+    renderToday(now);
+    renderCalendar();
+    showToast(`上班时间已修改为 ${formatClock(record.clockIn).slice(0, 5)}`);
+  }
+
+  function handleClockInAction() {
+    const { record } = getTodayContext();
+    if (record.clockIn) openClockInEditor();
+    else clockIn();
   }
 
   function clockOut() {
@@ -472,8 +533,13 @@
     renderCalendar();
   });
   elements.dayToggle.addEventListener("click", toggleRestDay);
-  elements.clockInButton.addEventListener("click", clockIn);
+  elements.clockInButton.addEventListener("click", handleClockInAction);
   elements.clockOutButton.addEventListener("click", clockOut);
+  elements.cancelClockInEdit.addEventListener("click", closeClockInEditor);
+  elements.saveClockInEdit.addEventListener("click", saveClockInTime);
+  elements.clockInDialog.addEventListener("click", (event) => {
+    if (event.target === elements.clockInDialog) closeClockInEditor();
+  });
   elements.exportButton.addEventListener("click", exportData);
   elements.importInput.addEventListener("change", importData);
   elements.clearButton.addEventListener("click", clearData);
