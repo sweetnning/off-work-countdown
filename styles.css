@@ -236,8 +236,7 @@ a:focus-visible {
 }
 
 .date-label,
-.overline,
-.privacy-note p {
+.overline {
   margin: 0;
 }
 
@@ -558,29 +557,6 @@ h1 {
   bottom: 19%;
   color: color-mix(in srgb, var(--mint) 90%, #4d8f87);
   animation-delay: -1.1s;
-}
-
-.privacy-note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 21px 12px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  text-align: center;
-}
-
-.privacy-note strong {
-  color: var(--text);
-}
-
-.privacy-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mint);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--mint) 22%, transparent);
 }
 
 .calendar-dialog {
@@ -1175,16 +1151,6 @@ body.is-complete .hero {
 
   .speech-bubble {
     font-size: 11px;
-  }
-
-  .privacy-note {
-    align-items: flex-start;
-    text-align: left;
-  }
-
-  .privacy-dot {
-    margin-top: 5px;
-    flex: 0 0 auto;
   }
 
   .calendar-dialog {
