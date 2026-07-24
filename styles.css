@@ -207,19 +207,6 @@ a:focus-visible {
   font-weight: 650;
 }
 
-.calendar-count {
-  display: grid;
-  place-items: center;
-  min-width: 21px;
-  height: 21px;
-  padding: 0 5px;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--accent);
-  font-size: 11px;
-  font-weight: 750;
-}
-
 .hero {
   min-height: min(690px, calc(100vh - 145px));
   display: grid;
@@ -1090,12 +1077,6 @@ body.is-complete .hero {
   .icon-button {
     width: 44px;
     padding: 7px;
-  }
-
-  .calendar-count {
-    position: absolute;
-    top: -5px;
-    right: -4px;
   }
 
   .hero {

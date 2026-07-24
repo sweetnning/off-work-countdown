@@ -20,7 +20,6 @@
     themeIcon: document.querySelector(".theme-icon"),
     themeLabel: document.querySelector(".theme-button .button-label"),
     calendarButton: document.querySelector("#calendarButton"),
-    monthCountBadge: document.querySelector("#monthCountBadge"),
     dateLabel: document.querySelector("#dateLabel"),
     dayToggle: document.querySelector("#dayToggle"),
     overline: document.querySelector("#overline"),
@@ -236,7 +235,6 @@
     elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；单击取消，双击修改` : "上班打卡");
     elements.clockOutButton.setAttribute("aria-label", record.clockOut ? `下班打卡时间 ${formatClock(record.clockOut)}；单击取消，双击修改` : "下班打卡");
 
-    updateMonthCounts(now);
   }
 
   function hashDate(dateKey) {
@@ -413,10 +411,6 @@
   function getMonthWorkCount(date) {
     const prefix = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     return Object.entries(state.records).filter(([key, record]) => key.startsWith(prefix) && record.clockIn).length;
-  }
-
-  function updateMonthCounts(now = new Date()) {
-    elements.monthCountBadge.textContent = String(getMonthWorkCount(now));
   }
 
   function renderCalendar() {
