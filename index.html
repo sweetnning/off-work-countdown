@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#fffaf7">
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/brand-pudding.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-theme="minimal">
@@ -23,7 +23,9 @@
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="#main" aria-label="返回倒计时">
-        <span class="brand-mark" aria-hidden="true">18</span>
+        <span class="brand-mark" aria-hidden="true">
+          <img src="assets/brand-pudding.png" alt="">
+        </span>
         <span>
           <strong>下班倒计时</strong>
           <small>今天也慢慢来</small>
@@ -105,7 +107,6 @@
             <span class="doodle doodle-flower" aria-hidden="true">✿</span>
             <img id="companionImage" src="assets/record-pencil.png" alt="抱着铅笔记录的小动物">
           </div>
-          <p class="companion-note" id="companionNote">打卡以后，它会陪你一起等下班。</p>
         </aside>
       </section>
 
@@ -115,10 +116,6 @@
       </section>
     </main>
 
-    <footer>
-      <span>每天 18:00，准时收工。</span>
-      <button class="text-button" id="openCalendarFooter" type="button">查看打卡日历</button>
-    </footer>
   </div>
 
   <dialog class="calendar-dialog" id="calendarDialog" aria-labelledby="calendarTitle">

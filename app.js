@@ -20,7 +20,6 @@
     themeIcon: document.querySelector(".theme-icon"),
     themeLabel: document.querySelector(".theme-button .button-label"),
     calendarButton: document.querySelector("#calendarButton"),
-    openCalendarFooter: document.querySelector("#openCalendarFooter"),
     monthCountBadge: document.querySelector("#monthCountBadge"),
     dateLabel: document.querySelector("#dateLabel"),
     dayToggle: document.querySelector("#dayToggle"),
@@ -40,7 +39,6 @@
     durationValue: document.querySelector("#durationValue"),
     speechBubble: document.querySelector("#speechBubble"),
     companionImage: document.querySelector("#companionImage"),
-    companionNote: document.querySelector("#companionNote"),
     stickerStage: document.querySelector("#stickerStage"),
     calendarDialog: document.querySelector("#calendarDialog"),
     closeCalendar: document.querySelector("#closeCalendar"),
@@ -159,10 +157,9 @@
     if (persist) localStorage.setItem(THEME_KEY, nextTheme);
   }
 
-  function setCompanion(src, alt, speech, note) {
+  function setCompanion(src, alt, speech) {
     if (elements.companionImage.getAttribute("src") === src) {
       elements.speechBubble.textContent = speech;
-      elements.companionNote.textContent = note;
       return;
     }
     elements.stickerStage.classList.add("is-changing");
@@ -170,7 +167,6 @@
       elements.companionImage.src = src;
       elements.companionImage.alt = alt;
       elements.speechBubble.textContent = speech;
-      elements.companionNote.textContent = note;
       elements.stickerStage.classList.remove("is-changing");
     }, 170);
   }
@@ -210,23 +206,23 @@
       elements.overline.textContent = "今天不用倒数";
       elements.heroTitle.textContent = "好好休息一下";
       const imageIndex = hashDate(dateKey) % REST_IMAGES.length;
-      setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "休息也是正经事", "今天的任务：把自己照顾好。");
+      setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "休息也是正经事");
     } else if (record.clockOut) {
       elements.overline.textContent = "今日任务完成";
       elements.heroTitle.textContent = "下班啦，辛苦了";
-      setCompanion("assets/celebrate.png", "拿着礼炮庆祝下班的可爱角色", "今天也顺利收工！", `你今天工作了 ${formatDuration(record.workedMinutes ?? calculateWorkedMinutes(record))}。`);
+      setCompanion("assets/celebrate.png", "拿着礼炮庆祝下班的可爱角色", "今天也顺利收工！");
     } else if (remaining === 0) {
       elements.overline.textContent = "下班时间到了";
       elements.heroTitle.textContent = "可以准备收工了";
-      setCompanion("assets/celebrate.png", "拿着礼炮庆祝的可爱角色", "18:00 到啦！", "别忘了按下下班打卡，为今天画个句号。");
+      setCompanion("assets/celebrate.png", "拿着礼炮庆祝的可爱角色", "18:00 到啦！");
     } else if (record.clockIn) {
       elements.overline.textContent = "距离下班还有";
       elements.heroTitle.textContent = "稳稳度过今天";
-      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "已经在路上啦", "它会陪你一起等到 18:00。");
+      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "已经在路上啦");
     } else {
       elements.overline.textContent = "距离下班还有";
       elements.heroTitle.textContent = "准备好就出发";
-      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "先打个上班卡吧", "记录今天的开始，晚上就能看到工作了多久。");
+      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "先打个上班卡吧");
     }
 
     elements.clockInValue.textContent = formatClock(record.clockIn);
@@ -461,7 +457,6 @@
     updateTheme(elements.body.dataset.theme === "cozy" ? "minimal" : "cozy");
   });
   elements.calendarButton.addEventListener("click", openCalendar);
-  elements.openCalendarFooter.addEventListener("click", openCalendar);
   elements.closeCalendar.addEventListener("click", closeCalendar);
   elements.calendarDialog.addEventListener("click", (event) => {
     if (event.target === elements.calendarDialog) closeCalendar();
