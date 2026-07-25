@@ -186,39 +186,50 @@
     elements.dateLabel.textContent = formatDateLong(now);
     const target = new Date(now);
     target.setHours(END_HOUR, END_MINUTE, 0, 0);
-    const remaining = Math.max(0, target - now);
-    const hours = Math.floor(remaining / 3600000);
-    const minutes = Math.floor((remaining % 3600000) / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
+    const untilEnd = target - now;
+    const isOvertime = !rest && !record.clockOut && untilEnd <= 0;
+    const completedWork = record.clockIn && record.clockOut
+      ? Math.max(0, new Date(record.clockOut) - new Date(record.clockIn))
+      : null;
+    const displayedDuration = completedWork ?? (isOvertime ? Math.abs(untilEnd) : Math.max(0, untilEnd));
+    const hours = Math.floor(displayedDuration / 3600000);
+    const minutes = Math.floor((displayedDuration % 3600000) / 60000);
+    const seconds = Math.floor((displayedDuration % 60000) / 1000);
     elements.hours.textContent = String(hours).padStart(2, "0");
     elements.minutes.textContent = String(minutes).padStart(2, "0");
     elements.seconds.textContent = String(seconds).padStart(2, "0");
 
     elements.body.classList.toggle("is-resting", rest);
     elements.body.classList.toggle("is-complete", Boolean(record.clockOut));
+    elements.body.classList.toggle("is-overtime", isOvertime);
     elements.dayToggle.textContent = rest ? "切换为工作日" : "今天休息";
     elements.dayToggle.setAttribute("aria-pressed", String(rest));
 
     if (rest) {
       elements.overline.textContent = "今天不用倒数";
       elements.heroTitle.textContent = "好好休息一下";
+      elements.countdown.setAttribute("aria-label", "今天休息");
       const imageIndex = hashDate(dateKey) % REST_IMAGES.length;
       setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "休息也是正经事");
     } else if (record.clockOut) {
-      elements.overline.textContent = "今日任务完成";
+      elements.overline.textContent = "今日工作时长";
       elements.heroTitle.textContent = "下班啦，辛苦了";
+      elements.countdown.setAttribute("aria-label", "今日工作时长");
       setCompanion("assets/celebrate.png", "拿着礼炮庆祝下班的可爱角色", "今天也顺利收工！");
-    } else if (remaining === 0) {
-      elements.overline.textContent = "下班时间到了";
-      elements.heroTitle.textContent = "可以准备收工了";
-      setCompanion("assets/celebrate.png", "拿着礼炮庆祝的可爱角色", "18:00 到啦！");
+    } else if (isOvertime) {
+      elements.overline.textContent = "今天已加班";
+      elements.heroTitle.textContent = "辛苦了，记得下班打卡";
+      elements.countdown.setAttribute("aria-label", "超过下班时间的时长");
+      setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "坚持到现在，辛苦啦");
     } else if (record.clockIn) {
       elements.overline.textContent = "距离下班还有";
       elements.heroTitle.textContent = "稳稳度过今天";
+      elements.countdown.setAttribute("aria-label", "距离下班的剩余时间");
       setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "You can do it！");
     } else {
       elements.overline.textContent = "距离下班还有";
       elements.heroTitle.textContent = "准备好就出发";
+      elements.countdown.setAttribute("aria-label", "距离下班的剩余时间");
       setCompanion("assets/record-pencil.png", "抱着铅笔记录的小动物", "先打个上班卡吧");
     }
 
