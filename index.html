@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body data-theme="minimal">
   <!--
@@ -152,11 +152,22 @@
 
   <dialog class="time-edit-dialog" id="timeEditDialog" aria-labelledby="timeEditDialogTitle">
     <div class="time-edit-shell">
-      <p class="dialog-kicker">补录实际时间</p>
+      <p class="dialog-kicker" id="timeEditKicker">补录实际时间</p>
       <h2 id="timeEditDialogTitle">修改打卡时间</h2>
       <p class="time-edit-help" id="timeEditHelp">选择实际打卡时间，今日工作时长会自动更新。</p>
       <label for="timeEditInput" id="timeEditLabel">打卡时间</label>
       <input id="timeEditInput" type="time" step="60" required>
+      <fieldset class="time-save-scope" id="timeSaveScope" hidden>
+        <legend>这次修改怎么保存？</legend>
+        <label>
+          <input type="radio" name="endTimeScope" value="today" checked>
+          <span><strong>仅今天</strong><small>只改变今天的倒计时</small></span>
+        </label>
+        <label>
+          <input type="radio" name="endTimeScope" value="default">
+          <span><strong>设为默认</strong><small>以后每天都使用这个时间</small></span>
+        </label>
+      </fieldset>
       <div class="time-edit-actions">
         <button id="cancelTimeEdit" type="button">取消</button>
         <button class="save-time-button" id="saveTimeEdit" type="button">保存时间</button>
@@ -176,6 +187,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

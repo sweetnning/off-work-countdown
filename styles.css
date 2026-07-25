@@ -642,6 +642,62 @@ h1 {
   outline: 3px solid color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+.time-save-scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.time-save-scope[hidden] {
+  display: none;
+}
+
+.time-save-scope legend {
+  grid-column: 1 / -1;
+  margin-bottom: 1px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.time-save-scope label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.time-save-scope label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
+}
+
+.time-save-scope input {
+  accent-color: var(--accent);
+}
+
+.time-save-scope strong,
+.time-save-scope small {
+  display: block;
+}
+
+.time-save-scope strong {
+  font-size: 12px;
+}
+
+.time-save-scope small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
 .time-edit-actions {
   display: grid;
   grid-template-columns: 1fr 1.25fr;

@@ -3,8 +3,8 @@
 
   const STORAGE_KEY = "offWorkCountdown.v1";
   const THEME_KEY = "offWorkCountdown.theme";
-  const END_HOUR = 18;
-  const END_MINUTE = 0;
+  const SETTINGS_KEY = "offWorkCountdown.settings.v1";
+  const FALLBACK_END_TIME = "18:00";
   const REST_IMAGES = [
     "assets/rest-pink.png",
     "assets/rest-yellow.png",
@@ -53,10 +53,12 @@
     importInput: document.querySelector("#importInput"),
     clearButton: document.querySelector("#clearButton"),
     timeEditDialog: document.querySelector("#timeEditDialog"),
+    timeEditKicker: document.querySelector("#timeEditKicker"),
     timeEditDialogTitle: document.querySelector("#timeEditDialogTitle"),
     timeEditHelp: document.querySelector("#timeEditHelp"),
     timeEditLabel: document.querySelector("#timeEditLabel"),
     timeEditInput: document.querySelector("#timeEditInput"),
+    timeSaveScope: document.querySelector("#timeSaveScope"),
     cancelTimeEdit: document.querySelector("#cancelTimeEdit"),
     saveTimeEdit: document.querySelector("#saveTimeEdit"),
     celebrationLayer: document.querySelector("#celebrationLayer"),
@@ -64,6 +66,7 @@
   };
 
   let state = loadState();
+  let settings = loadSettings();
   let calendarCursor = startOfMonth(new Date());
   let selectedDateKey = getDateKey(new Date());
   let toastTimer = 0;
@@ -86,6 +89,39 @@
 
   function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function loadSettings() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      return {
+        defaultEndTime: isValidTime(parsed.defaultEndTime) ? parsed.defaultEndTime : FALLBACK_END_TIME
+      };
+    } catch (error) {
+      console.warn("无法读取下班时间设置，已恢复为 18:00。", error);
+      return { defaultEndTime: FALLBACK_END_TIME };
+    }
+  }
+
+  function saveSettings() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  function isValidTime(value) {
+    if (!/^\d{2}:\d{2}$/.test(value || "")) return false;
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+  }
+
+  function getPlannedEndTime(record) {
+    return isValidTime(record.plannedEndTime) ? record.plannedEndTime : settings.defaultEndTime;
+  }
+
+  function getEndTarget(date, plannedEndTime) {
+    const [hours, minutes] = plannedEndTime.split(":").map(Number);
+    const target = new Date(date);
+    target.setHours(hours, minutes, 0, 0);
+    return target;
   }
 
   function getDateKey(date) {
@@ -184,8 +220,8 @@
     }
 
     elements.dateLabel.textContent = formatDateLong(now);
-    const target = new Date(now);
-    target.setHours(END_HOUR, END_MINUTE, 0, 0);
+    const plannedEndTime = getPlannedEndTime(record);
+    const target = getEndTarget(now, plannedEndTime);
     const untilEnd = target - now;
     const isOvertime = !rest && !record.clockOut && untilEnd <= 0;
     const completedWork = record.clockIn && record.clockOut
@@ -242,9 +278,11 @@
     elements.clockOutButton.disabled = rest || !record.clockIn;
     elements.clockInLabel.textContent = "上班打卡";
     elements.clockInHint.textContent = record.clockIn ? formatClock(record.clockIn) : rest ? "休息日无需打卡" : "记录这一刻";
-    elements.clockOutHint.textContent = record.clockOut ? formatClock(record.clockOut) : !record.clockIn ? "上班后解锁" : "结束今天工作";
+    elements.clockOutHint.textContent = record.clockOut ? formatClock(record.clockOut) : !record.clockIn ? "上班后解锁" : `${plannedEndTime} 下班`;
     elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；单击取消，双击修改` : "上班打卡");
-    elements.clockOutButton.setAttribute("aria-label", record.clockOut ? `下班打卡时间 ${formatClock(record.clockOut)}；单击取消，双击修改` : "下班打卡");
+    elements.clockOutButton.setAttribute("aria-label", record.clockOut
+      ? `下班打卡时间 ${formatClock(record.clockOut)}；单击取消，双击修改`
+      : `下班打卡；当前计划 ${plannedEndTime} 下班，单击打卡，双击调整计划时间`);
 
   }
 
@@ -285,12 +323,33 @@
     editMode = mode;
     const editingClockIn = mode === "clockIn";
     const punchDate = new Date(value);
+    elements.timeEditKicker.textContent = "补录实际时间";
     elements.timeEditDialogTitle.textContent = editingClockIn ? "修改上班时间" : "修改下班时间";
     elements.timeEditHelp.textContent = editingClockIn
       ? "选择今天真正开始工作的时间，今日工作时长会自动更新。"
       : "选择今天真正结束工作的时间，今日工作时长会自动更新。";
     elements.timeEditLabel.textContent = editingClockIn ? "今天几点开始工作？" : "今天几点结束工作？";
     elements.timeEditInput.value = `${String(punchDate.getHours()).padStart(2, "0")}:${String(punchDate.getMinutes()).padStart(2, "0")}`;
+    elements.timeSaveScope.hidden = true;
+    if (typeof elements.timeEditDialog.showModal === "function") {
+      elements.timeEditDialog.showModal();
+    } else {
+      elements.timeEditDialog.setAttribute("open", "");
+    }
+  }
+
+  function openPlannedEndEditor() {
+    const { record, rest } = getTodayContext();
+    if (rest || !record.clockIn || record.clockOut) return;
+    editMode = "plannedEnd";
+    elements.timeEditKicker.textContent = "调整倒计时";
+    elements.timeEditDialogTitle.textContent = "调整计划下班时间";
+    elements.timeEditHelp.textContent = "只改变倒计时目标，不会生成下班打卡，也不会修改已有记录。";
+    elements.timeEditLabel.textContent = "今天计划几点下班？";
+    elements.timeEditInput.value = getPlannedEndTime(record);
+    elements.timeSaveScope.hidden = false;
+    const todayScope = elements.timeSaveScope.querySelector('input[value="today"]');
+    if (todayScope) todayScope.checked = true;
     if (typeof elements.timeEditDialog.showModal === "function") {
       elements.timeEditDialog.showModal();
     } else {
@@ -305,7 +364,7 @@
 
   function saveEditedTime() {
     const value = elements.timeEditInput.value;
-    if (!/^\d{2}:\d{2}$/.test(value)) {
+    if (!isValidTime(value)) {
       showToast("请先选择打卡时间");
       return;
     }
@@ -313,6 +372,25 @@
     const now = new Date();
     const dateKey = getDateKey(now);
     const record = ensureRecord(dateKey);
+
+    if (editMode === "plannedEnd") {
+      const scope = elements.timeSaveScope.querySelector('input[name="endTimeScope"]:checked')?.value || "today";
+      if (scope === "default") {
+        settings.defaultEndTime = value;
+        saveSettings();
+        delete record.plannedEndTime;
+        showToast(`默认下班时间已改为 ${value}`);
+      } else {
+        record.plannedEndTime = value;
+        showToast(`今天改为 ${value} 下班`);
+      }
+      saveState();
+      closeTimeEditor();
+      renderToday(now);
+      renderCalendar();
+      return;
+    }
+
     const [hours, minutes] = value.split(":").map(Number);
     const revisedTime = new Date(now);
     revisedTime.setHours(hours, minutes, 0, 0);
@@ -362,8 +440,22 @@
   function handlePunchAction(mode) {
     const { record } = getTodayContext();
     if (!record[mode]) {
-      if (mode === "clockIn") clockIn();
-      else clockOut();
+      if (mode === "clockIn") {
+        clockIn();
+        return;
+      }
+
+      if (tapTimers.clockOut) {
+        window.clearTimeout(tapTimers.clockOut);
+        tapTimers.clockOut = 0;
+        openPlannedEndEditor();
+        return;
+      }
+
+      tapTimers.clockOut = window.setTimeout(() => {
+        tapTimers.clockOut = 0;
+        clockOut();
+      }, 280);
       return;
     }
 
@@ -520,7 +612,8 @@
       app: "off-work-countdown",
       exportedAt: new Date().toISOString(),
       version: 1,
-      records: state.records
+      records: state.records,
+      settings
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -541,6 +634,10 @@
         throw new Error("备份格式不正确");
       }
       state = { version: 1, records: parsed.records };
+      if (parsed.settings && isValidTime(parsed.settings.defaultEndTime)) {
+        settings.defaultEndTime = parsed.settings.defaultEndTime;
+        saveSettings();
+      }
       saveState();
       renderToday();
       renderCalendar();
