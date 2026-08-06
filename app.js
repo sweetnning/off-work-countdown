@@ -38,7 +38,9 @@
     slackingHint: document.querySelector("#slackingHint"),
     clockInValue: document.querySelector("#clockInValue"),
     clockOutValue: document.querySelector("#clockOutValue"),
-    attendanceValue: document.querySelector("#attendanceValue"),
+    statusValue: document.querySelector("#statusValue"),
+    statusText: document.querySelector("#statusText"),
+    statusIcon: document.querySelector("#statusIcon"),
     slackingValue: document.querySelector("#slackingValue"),
     durationValue: document.querySelector("#durationValue"),
     speechBubble: document.querySelector("#speechBubble"),
@@ -345,12 +347,20 @@
 
     elements.clockInValue.textContent = formatClock(record.clockIn);
     elements.clockOutValue.textContent = formatClock(record.clockOut);
-    const attendanceMilliseconds = calculateAttendanceMilliseconds(record);
     const slackingMilliseconds = calculateSlackingMilliseconds(record, now);
     const workedMinutes = record.clockOut ? (record.workedMinutes ?? calculateWorkedMinutes(record)) : null;
-    elements.attendanceValue.textContent = attendanceMilliseconds === null
-      ? record.clockIn ? "等待下班" : "等待记录"
-      : formatCompactDuration(attendanceMilliseconds / 60000);
+    const summaryStatus = rest
+      ? { text: "休息中", icon: "" }
+      : record.clockOut
+        ? { text: "解放了", icon: "assets/status-free.png" }
+        : record.clockIn
+          ? { text: "进行中", icon: "assets/status-working.png" }
+          : { text: "未开始", icon: "" };
+    elements.statusText.textContent = summaryStatus.text;
+    elements.statusValue.setAttribute("aria-label", summaryStatus.text);
+    elements.statusIcon.hidden = !summaryStatus.icon;
+    if (summaryStatus.icon) elements.statusIcon.src = summaryStatus.icon;
+    else elements.statusIcon.removeAttribute("src");
     elements.slackingValue.textContent = formatCompactDuration(slackingMilliseconds / 60000);
     elements.durationValue.textContent = workedMinutes === null
       ? record.clockIn ? "等待下班" : "等待记录"
@@ -711,7 +721,7 @@
       const slacking = calculateSlackingMilliseconds(record, new Date(record.clockOut)) / 60000;
       const worked = record.workedMinutes ?? calculateWorkedMinutes(record);
       elements.selectedDateStatus.textContent = `实际工作 ${formatDuration(worked)} · 摸鱼 ${formatCompactDuration(slacking)}`;
-      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 上班 · ${formatClock(record.clockOut)} 下班 · 在岗 ${formatCompactDuration(attendance)}`;
+      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 上班 · ${formatClock(record.clockOut)} 下班 · 总时长 ${formatCompactDuration(attendance)}`;
     } else if (record.clockIn) {
       const slacking = calculateSlackingMilliseconds(record) / 60000;
       elements.selectedDateStatus.textContent = isSlacking(record) ? `摸鱼中 · 已累计 ${formatCompactDuration(slacking)}` : "已上班打卡";

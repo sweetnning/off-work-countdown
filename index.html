@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body data-theme="minimal">
   <!--
@@ -96,7 +96,13 @@
             <div class="today-summary" id="todaySummary" aria-live="polite">
               <div><span>上班</span><strong id="clockInValue">未打卡</strong></div>
               <div><span>下班</span><strong id="clockOutValue">未打卡</strong></div>
-              <div><span>在岗</span><strong id="attendanceValue">等待记录</strong></div>
+              <div class="status-cell">
+                <span>状态</span>
+                <strong class="status-value" id="statusValue">
+                  <span class="status-text" id="statusText">未开始</span>
+                  <img class="status-icon" id="statusIcon" alt="" hidden>
+                </strong>
+              </div>
               <div class="slacking-cell"><span>摸鱼</span><strong id="slackingValue">0 分钟</strong></div>
               <div class="duration-cell"><span>实际工作</span><strong id="durationValue">等待记录</strong></div>
             </div>
@@ -193,6 +199,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
