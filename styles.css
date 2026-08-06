@@ -478,31 +478,6 @@ h1 {
   color: #52758a;
 }
 
-.today-summary .status-value {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.today-summary .status-text {
-  display: inline;
-  flex: 0 0 auto;
-  color: inherit;
-  font-size: inherit;
-}
-
-.status-icon {
-  display: block;
-  width: auto;
-  max-width: 34px;
-  height: 21px;
-  object-fit: contain;
-}
-
-.status-icon[hidden] {
-  display: none;
-}
-
 .companion {
   position: relative;
   display: flex;

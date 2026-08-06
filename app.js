@@ -39,8 +39,6 @@
     clockInValue: document.querySelector("#clockInValue"),
     clockOutValue: document.querySelector("#clockOutValue"),
     statusValue: document.querySelector("#statusValue"),
-    statusText: document.querySelector("#statusText"),
-    statusIcon: document.querySelector("#statusIcon"),
     slackingValue: document.querySelector("#slackingValue"),
     durationValue: document.querySelector("#durationValue"),
     speechBubble: document.querySelector("#speechBubble"),
@@ -350,17 +348,13 @@
     const slackingMilliseconds = calculateSlackingMilliseconds(record, now);
     const workedMinutes = record.clockOut ? (record.workedMinutes ?? calculateWorkedMinutes(record)) : null;
     const summaryStatus = rest
-      ? { text: "休息中", icon: "" }
+      ? "休息中"
       : record.clockOut
-        ? { text: "解放了", icon: "assets/status-free.png" }
+        ? "解放啦"
         : record.clockIn
-          ? { text: "进行中", icon: "assets/status-working.png" }
-          : { text: "未开始", icon: "" };
-    elements.statusText.textContent = summaryStatus.text;
-    elements.statusValue.setAttribute("aria-label", summaryStatus.text);
-    elements.statusIcon.hidden = !summaryStatus.icon;
-    if (summaryStatus.icon) elements.statusIcon.src = summaryStatus.icon;
-    else elements.statusIcon.removeAttribute("src");
+          ? "进行中"
+          : "未开始";
+    elements.statusValue.textContent = summaryStatus;
     elements.slackingValue.textContent = formatCompactDuration(slackingMilliseconds / 60000);
     elements.durationValue.textContent = workedMinutes === null
       ? record.clockIn ? "等待下班" : "等待记录"
