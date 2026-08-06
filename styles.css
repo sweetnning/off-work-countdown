@@ -348,7 +348,7 @@ h1 {
 
 .punch-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
@@ -392,6 +392,18 @@ h1 {
   background: var(--accent-soft);
 }
 
+.slacking-button {
+  color: #66521a;
+  background: color-mix(in srgb, var(--yellow) 56%, #fff);
+}
+
+.slacking-button[aria-pressed="true"] {
+  color: #31566c;
+  border-color: color-mix(in srgb, var(--blue) 72%, #52758a);
+  background: color-mix(in srgb, var(--blue) 54%, #fff);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 20%, transparent), var(--soft-shadow);
+}
+
 .punch-symbol {
   display: grid;
   place-items: center;
@@ -423,7 +435,7 @@ h1 {
 
 .today-summary {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.35fr;
+  grid-template-columns: repeat(4, 1fr) 1.35fr;
   margin-top: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -460,6 +472,10 @@ h1 {
 
 .duration-cell strong {
   color: var(--accent-ink);
+}
+
+.slacking-cell strong {
+  color: #52758a;
 }
 
 .companion {
@@ -1043,6 +1059,16 @@ body.is-overtime .time-block {
   border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 
+body.is-slacking .sticker-stage {
+  background: color-mix(in srgb, var(--blue) 31%, var(--surface-solid));
+}
+
+body.is-slacking .sticker-stage img {
+  width: 88%;
+  max-height: 88%;
+  mix-blend-mode: normal;
+}
+
 @keyframes gentle-float {
   0%, 100% { transform: translateY(4px) rotate(-1.2deg); }
   50% { transform: translateY(-8px) rotate(1.2deg); }
@@ -1170,7 +1196,12 @@ body.is-overtime .time-block {
   }
 
   .punch-actions {
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
+  }
+
+  .slacking-button {
+    grid-column: 1 / -1;
   }
 
   .punch-button {
@@ -1198,9 +1229,20 @@ body.is-overtime .time-block {
     grid-template-columns: 1fr 1fr;
   }
 
+  .today-summary > div {
+    border-left: 0;
+  }
+
+  .today-summary > div:nth-child(even) {
+    border-left: 1px solid var(--line);
+  }
+
+  .today-summary > div:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+
   .today-summary .duration-cell {
     grid-column: 1 / -1;
-    border-top: 1px solid var(--line);
     border-left: 0;
   }
 

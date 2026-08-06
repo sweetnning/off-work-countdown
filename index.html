@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body data-theme="minimal">
   <!--
@@ -87,12 +87,18 @@
                 <span class="punch-symbol" aria-hidden="true">下</span>
                 <span><strong>下班打卡</strong><small id="clockOutHint">完成后解锁</small></span>
               </button>
+              <button class="punch-button slacking-button" id="slackingButton" type="button" aria-label="开始摸鱼" disabled>
+                <span class="punch-symbol" aria-hidden="true">鱼</span>
+                <span><strong id="slackingLabel">开始摸鱼</strong><small id="slackingHint">上班后解锁</small></span>
+              </button>
             </div>
 
             <div class="today-summary" id="todaySummary" aria-live="polite">
               <div><span>上班</span><strong id="clockInValue">未打卡</strong></div>
               <div><span>下班</span><strong id="clockOutValue">未打卡</strong></div>
-              <div class="duration-cell"><span>今日工作</span><strong id="durationValue">等待记录</strong></div>
+              <div><span>在岗</span><strong id="attendanceValue">等待记录</strong></div>
+              <div class="slacking-cell"><span>摸鱼</span><strong id="slackingValue">0 分钟</strong></div>
+              <div class="duration-cell"><span>实际工作</span><strong id="durationValue">等待记录</strong></div>
             </div>
           </div>
         </div>
@@ -187,6 +193,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

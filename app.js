@@ -30,11 +30,16 @@
     seconds: document.querySelector("#seconds"),
     clockInButton: document.querySelector("#clockInButton"),
     clockOutButton: document.querySelector("#clockOutButton"),
+    slackingButton: document.querySelector("#slackingButton"),
     clockInLabel: document.querySelector("#clockInLabel"),
     clockInHint: document.querySelector("#clockInHint"),
     clockOutHint: document.querySelector("#clockOutHint"),
+    slackingLabel: document.querySelector("#slackingLabel"),
+    slackingHint: document.querySelector("#slackingHint"),
     clockInValue: document.querySelector("#clockInValue"),
     clockOutValue: document.querySelector("#clockOutValue"),
+    attendanceValue: document.querySelector("#attendanceValue"),
+    slackingValue: document.querySelector("#slackingValue"),
     durationValue: document.querySelector("#durationValue"),
     speechBubble: document.querySelector("#speechBubble"),
     companionImage: document.querySelector("#companionImage"),
@@ -169,15 +174,78 @@
 
   function formatDuration(totalMinutes) {
     if (!Number.isFinite(totalMinutes)) return "等待记录";
-    const safeMinutes = Math.max(0, Math.round(totalMinutes));
+    const safeMinutes = Math.max(0, Math.floor(totalMinutes));
     const hours = Math.floor(safeMinutes / 60);
     const minutes = safeMinutes % 60;
     return `${hours} 小时 ${minutes} 分钟`;
   }
 
-  function calculateWorkedMinutes(record) {
+  function formatCompactDuration(totalMinutes) {
+    if (!Number.isFinite(totalMinutes)) return "等待记录";
+    const safeMinutes = Math.max(0, Math.floor(totalMinutes));
+    if (totalMinutes > 0 && safeMinutes === 0) return "少于 1 分钟";
+    const hours = Math.floor(safeMinutes / 60);
+    const minutes = safeMinutes % 60;
+    return hours ? `${hours}小时 ${minutes}分钟` : `${minutes} 分钟`;
+  }
+
+  function formatStopwatch(totalMilliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(totalMilliseconds / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return hours
+      ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+      : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function getSlackingSessions(record) {
+    return Array.isArray(record.slackingSessions) ? record.slackingSessions : [];
+  }
+
+  function getActiveSlackingSession(record) {
+    const sessions = getSlackingSessions(record);
+    for (let index = sessions.length - 1; index >= 0; index -= 1) {
+      const session = sessions[index];
+      if (session?.start && !session.end) return session;
+    }
+    return null;
+  }
+
+  function isSlacking(record) {
+    return Boolean(record.clockIn && !record.clockOut && getActiveSlackingSession(record));
+  }
+
+  function calculateAttendanceMilliseconds(record) {
     if (!record.clockIn || !record.clockOut) return null;
-    return Math.max(0, (new Date(record.clockOut) - new Date(record.clockIn)) / 60000);
+    return Math.max(0, new Date(record.clockOut) - new Date(record.clockIn));
+  }
+
+  function calculateSlackingMilliseconds(record, until = new Date()) {
+    if (!record.clockIn) return 0;
+    const clockIn = new Date(record.clockIn).getTime();
+    const limit = record.clockOut ? new Date(record.clockOut).getTime() : new Date(until).getTime();
+    if (!Number.isFinite(clockIn) || !Number.isFinite(limit) || limit <= clockIn) return 0;
+
+    return getSlackingSessions(record).reduce((total, session) => {
+      const sessionStart = new Date(session?.start).getTime();
+      const sessionEnd = session?.end ? new Date(session.end).getTime() : limit;
+      if (!Number.isFinite(sessionStart) || !Number.isFinite(sessionEnd)) return total;
+      const start = Math.max(clockIn, sessionStart);
+      const end = Math.min(limit, sessionEnd);
+      return total + Math.max(0, end - start);
+    }, 0);
+  }
+
+  function calculateWorkedMilliseconds(record) {
+    const attendance = calculateAttendanceMilliseconds(record);
+    if (attendance === null) return null;
+    return Math.max(0, attendance - calculateSlackingMilliseconds(record, new Date(record.clockOut)));
+  }
+
+  function calculateWorkedMinutes(record) {
+    const worked = calculateWorkedMilliseconds(record);
+    return worked === null ? null : worked / 60000;
   }
 
   function getTodayContext(now = new Date()) {
@@ -224,9 +292,8 @@
     const target = getEndTarget(now, plannedEndTime);
     const untilEnd = target - now;
     const isOvertime = !rest && !record.clockOut && untilEnd <= 0;
-    const completedWork = record.clockIn && record.clockOut
-      ? Math.max(0, new Date(record.clockOut) - new Date(record.clockIn))
-      : null;
+    const slacking = isSlacking(record);
+    const completedWork = calculateWorkedMilliseconds(record);
     const displayedDuration = completedWork ?? (isOvertime ? Math.abs(untilEnd) : Math.max(0, untilEnd));
     const hours = Math.floor(displayedDuration / 3600000);
     const minutes = Math.floor((displayedDuration % 3600000) / 60000);
@@ -238,6 +305,7 @@
     elements.body.classList.toggle("is-resting", rest);
     elements.body.classList.toggle("is-complete", Boolean(record.clockOut));
     elements.body.classList.toggle("is-overtime", isOvertime);
+    elements.body.classList.toggle("is-slacking", slacking);
     elements.dayToggle.textContent = rest ? "切换为工作日" : "今天休息";
     elements.dayToggle.setAttribute("aria-pressed", String(rest));
 
@@ -248,10 +316,16 @@
       const imageIndex = hashDate(dateKey) % REST_IMAGES.length;
       setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "休息也是正经事");
     } else if (record.clockOut) {
-      elements.overline.textContent = "今日工作时长";
+      elements.overline.textContent = "今日实际工作";
       elements.heroTitle.textContent = "下班啦，辛苦了";
-      elements.countdown.setAttribute("aria-label", "今日工作时长");
-      setCompanion("assets/celebrate.png", "拿着礼炮庆祝下班的可爱角色", "今天也顺利收工！");
+      elements.countdown.setAttribute("aria-label", "扣除摸鱼后的实际工作时长");
+      const imageIndex = hashDate(`${dateKey}-${record.clockOut}`) % REST_IMAGES.length;
+      setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "正式进入休息模式！");
+    } else if (slacking) {
+      elements.overline.textContent = "正在摸鱼";
+      elements.heroTitle.textContent = "忙里偷闲一下";
+      elements.countdown.setAttribute("aria-label", "距离下班的剩余时间");
+      setCompanion("assets/slacking-fish.png", "骑着大鱼摸鱼的可爱角色", "正在摸鱼…");
     } else if (isOvertime) {
       elements.overline.textContent = "今天已加班";
       elements.heroTitle.textContent = "辛苦了，记得下班打卡";
@@ -271,14 +345,41 @@
 
     elements.clockInValue.textContent = formatClock(record.clockIn);
     elements.clockOutValue.textContent = formatClock(record.clockOut);
-    const workedMinutes = record.workedMinutes ?? calculateWorkedMinutes(record);
-    elements.durationValue.textContent = formatDuration(workedMinutes);
+    const attendanceMilliseconds = calculateAttendanceMilliseconds(record);
+    const slackingMilliseconds = calculateSlackingMilliseconds(record, now);
+    const workedMinutes = record.clockOut ? (record.workedMinutes ?? calculateWorkedMinutes(record)) : null;
+    elements.attendanceValue.textContent = attendanceMilliseconds === null
+      ? record.clockIn ? "等待下班" : "等待记录"
+      : formatCompactDuration(attendanceMilliseconds / 60000);
+    elements.slackingValue.textContent = formatCompactDuration(slackingMilliseconds / 60000);
+    elements.durationValue.textContent = workedMinutes === null
+      ? record.clockIn ? "等待下班" : "等待记录"
+      : formatCompactDuration(workedMinutes);
 
     elements.clockInButton.disabled = rest;
     elements.clockOutButton.disabled = rest || !record.clockIn;
+    elements.slackingButton.disabled = rest || !record.clockIn || Boolean(record.clockOut);
     elements.clockInLabel.textContent = "上班打卡";
     elements.clockInHint.textContent = record.clockIn ? formatClock(record.clockIn) : rest ? "休息日无需打卡" : "记录这一刻";
     elements.clockOutHint.textContent = record.clockOut ? formatClock(record.clockOut) : !record.clockIn ? "上班后解锁" : `${plannedEndTime} 下班`;
+    elements.slackingLabel.textContent = slacking ? "结束摸鱼" : "开始摸鱼";
+    elements.slackingHint.textContent = rest
+      ? "休息日无需记录"
+      : !record.clockIn
+        ? "上班后解锁"
+      : record.clockOut
+        ? `共摸鱼 ${formatCompactDuration(slackingMilliseconds / 60000)}`
+        : slacking
+          ? `已摸鱼 ${formatStopwatch(slackingMilliseconds)}`
+          : slackingMilliseconds > 0
+            ? `累计 ${formatCompactDuration(slackingMilliseconds / 60000)}`
+            : "忙里偷闲一下";
+    elements.slackingButton.setAttribute("aria-pressed", String(slacking));
+    elements.slackingButton.setAttribute("aria-label", record.clockOut
+      ? `今日已下班，共摸鱼 ${formatCompactDuration(slackingMilliseconds / 60000)}`
+      : slacking
+        ? `结束摸鱼，当前累计 ${formatStopwatch(slackingMilliseconds)}`
+        : "开始摸鱼");
     elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；单击取消，双击修改` : "上班打卡");
     elements.clockOutButton.setAttribute("aria-label", record.clockOut
       ? `下班打卡时间 ${formatClock(record.clockOut)}；单击取消，双击修改`
@@ -295,7 +396,11 @@
     const dateKey = getDateKey(now);
     const record = ensureRecord(dateKey);
     if (isRestDay(now, dateKey)) delete record.restOverride;
-    else record.restOverride = true;
+    else {
+      record.restOverride = true;
+      const activeSession = getActiveSlackingSession(record);
+      if (activeSession) activeSession.end = now.toISOString();
+    }
     saveState();
     showToast(record.restOverride ? "今天已标记为休息日" : "已恢复为工作日");
     renderToday(now);
@@ -310,6 +415,7 @@
     target.clockIn = now.toISOString();
     delete target.clockOut;
     delete target.workedMinutes;
+    delete target.slackingSessions;
     saveState();
     showToast(`上班打卡成功 · ${formatClock(target.clockIn)}`);
     renderToday(now);
@@ -427,6 +533,7 @@
     if (mode === "clockIn") {
       delete target.clockIn;
       delete target.clockOut;
+      delete target.slackingSessions;
     } else {
       delete target.clockOut;
     }
@@ -477,13 +584,36 @@
     const { dateKey, record, rest } = getTodayContext(now);
     if (rest || !record.clockIn || record.clockOut) return;
     const target = ensureRecord(dateKey);
+    const activeSession = getActiveSlackingSession(target);
+    if (activeSession) activeSession.end = now.toISOString();
     target.clockOut = now.toISOString();
     target.workedMinutes = calculateWorkedMinutes(target);
     saveState();
     renderToday(now);
     renderCalendar();
     launchCelebration();
-    showToast(`下班打卡成功 · 今日 ${formatDuration(target.workedMinutes)}`);
+    showToast(`下班打卡成功 · 实际工作 ${formatDuration(target.workedMinutes)}`);
+  }
+
+  function toggleSlacking() {
+    const now = new Date();
+    const { dateKey, record, rest } = getTodayContext(now);
+    if (rest || !record.clockIn || record.clockOut) return;
+    const target = ensureRecord(dateKey);
+    const activeSession = getActiveSlackingSession(target);
+
+    if (activeSession) {
+      activeSession.end = now.toISOString();
+      showToast(`摸鱼结束 · 今日累计 ${formatCompactDuration(calculateSlackingMilliseconds(target, now) / 60000)}`);
+    } else {
+      target.slackingSessions ||= [];
+      target.slackingSessions.push({ start: now.toISOString() });
+      showToast("开始摸鱼，放松一下吧");
+    }
+
+    saveState();
+    renderToday(now);
+    renderCalendar();
   }
 
   function launchCelebration() {
@@ -577,11 +707,15 @@
     }).format(date);
 
     if (record.clockIn && record.clockOut) {
-      elements.selectedDateStatus.textContent = `工作 ${formatDuration(record.workedMinutes ?? calculateWorkedMinutes(record))}`;
-      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 上班 · ${formatClock(record.clockOut)} 下班`;
+      const attendance = calculateAttendanceMilliseconds(record) / 60000;
+      const slacking = calculateSlackingMilliseconds(record, new Date(record.clockOut)) / 60000;
+      const worked = record.workedMinutes ?? calculateWorkedMinutes(record);
+      elements.selectedDateStatus.textContent = `实际工作 ${formatDuration(worked)} · 摸鱼 ${formatCompactDuration(slacking)}`;
+      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 上班 · ${formatClock(record.clockOut)} 下班 · 在岗 ${formatCompactDuration(attendance)}`;
     } else if (record.clockIn) {
-      elements.selectedDateStatus.textContent = "已上班打卡";
-      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 开始 · 尚未下班打卡`;
+      const slacking = calculateSlackingMilliseconds(record) / 60000;
+      elements.selectedDateStatus.textContent = isSlacking(record) ? `摸鱼中 · 已累计 ${formatCompactDuration(slacking)}` : "已上班打卡";
+      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 开始 · 尚未下班打卡 · 摸鱼 ${formatCompactDuration(slacking)}`;
     } else if (rest) {
       elements.selectedDateStatus.textContent = "休息日";
       elements.selectedDateTimes.textContent = "今天没有打卡记录";
@@ -682,6 +816,7 @@
   elements.dayToggle?.addEventListener("click", toggleRestDay);
   elements.clockInButton?.addEventListener("click", () => handlePunchAction("clockIn"));
   elements.clockOutButton?.addEventListener("click", () => handlePunchAction("clockOut"));
+  elements.slackingButton?.addEventListener("click", toggleSlacking);
   elements.clockInButton?.addEventListener("dblclick", (event) => event.preventDefault());
   elements.clockOutButton?.addEventListener("dblclick", (event) => event.preventDefault());
   elements.cancelTimeEdit?.addEventListener("click", closeTimeEditor);
