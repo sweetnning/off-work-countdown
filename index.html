@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body data-theme="minimal">
   <!--
@@ -52,7 +52,7 @@
         <div class="hero-copy">
           <div class="eyebrow-row">
             <p class="date-label" id="dateLabel">正在读取日期</p>
-            <button class="day-toggle" id="dayToggle" type="button">设为休息日</button>
+            <button class="day-toggle bubble-button" id="bubbleButton" type="button">🫧 泡泡</button>
           </div>
 
           <div class="headline-wrap">
@@ -77,6 +77,8 @@
             </div>
           </div>
 
+          <button class="overtime-button" id="overtimeButton" type="button" hidden>还在加班</button>
+
           <div class="punch-panel" aria-label="今日打卡">
             <div class="punch-actions">
               <button class="punch-button punch-in" id="clockInButton" type="button" aria-label="上班打卡">
@@ -97,7 +99,7 @@
               <div><span>上班</span><strong id="clockInValue">未打卡</strong></div>
               <div><span>下班</span><strong id="clockOutValue">未打卡</strong></div>
               <div class="status-cell"><span>状态</span><strong id="statusValue">未开始</strong></div>
-              <div class="slacking-cell"><span>摸鱼</span><strong id="slackingValue">0 分钟</strong></div>
+              <button class="summary-entry slacking-cell" id="slackingSummaryButton" type="button"><span>摸鱼</span><strong id="slackingValue">0 分钟</strong></button>
               <div class="duration-cell"><span>实际工作</span><strong id="durationValue">等待记录</strong></div>
             </div>
           </div>
@@ -140,10 +142,19 @@
 
       <div class="selected-day" id="selectedDayPanel">
         <img src="assets/record-pencil.png" alt="记录贴图" loading="lazy" decoding="async">
-        <div>
+        <div class="selected-day-content">
           <span id="selectedDateLabel">选择一个日期</span>
           <strong id="selectedDateStatus">查看当天记录</strong>
           <small id="selectedDateTimes">上班与下班时间会显示在这里</small>
+          <div class="selected-metrics">
+            <small>摸鱼 <b id="selectedSlackingValue">0 分钟</b></small>
+            <small>实际工作 <b id="selectedWorkedValue">等待记录</b></small>
+            <small>泡泡 <b id="selectedBubbleCount">0 条</b></small>
+          </div>
+          <div class="selected-actions">
+            <button id="editSelectedRecord" type="button">编辑当天记录</button>
+            <button id="viewSelectedBubbles" type="button">查看泡泡</button>
+          </div>
         </div>
       </div>
 
@@ -156,28 +167,60 @@
     </div>
   </dialog>
 
-  <dialog class="time-edit-dialog" id="timeEditDialog" aria-labelledby="timeEditDialogTitle">
-    <div class="time-edit-shell">
-      <p class="dialog-kicker" id="timeEditKicker">补录实际时间</p>
-      <h2 id="timeEditDialogTitle">修改打卡时间</h2>
-      <p class="time-edit-help" id="timeEditHelp">选择实际打卡时间，今日工作时长会自动更新。</p>
-      <label for="timeEditInput" id="timeEditLabel">打卡时间</label>
-      <input id="timeEditInput" type="time" step="60" required>
-      <fieldset class="time-save-scope" id="timeSaveScope" hidden>
-        <legend>这次修改怎么保存？</legend>
-        <label>
-          <input type="radio" name="endTimeScope" value="today" checked>
-          <span><strong>仅今天</strong><small>只改变今天的倒计时</small></span>
-        </label>
-        <label>
-          <input type="radio" name="endTimeScope" value="default">
-          <span><strong>设为默认</strong><small>以后每天都使用这个时间</small></span>
-        </label>
-      </fieldset>
-      <div class="time-edit-actions">
-        <button id="cancelTimeEdit" type="button">取消</button>
-        <button class="save-time-button" id="saveTimeEdit" type="button">保存时间</button>
+  <dialog class="record-edit-dialog" id="recordEditDialog" aria-labelledby="recordEditTitle">
+    <div class="record-edit-shell">
+      <header class="editor-header">
+        <div>
+          <p class="dialog-kicker">轻松补一补</p>
+          <h2 id="recordEditTitle">编辑当天记录</h2>
+          <p id="recordEditDate">选择日期</p>
+        </div>
+        <button class="close-button" id="closeRecordEdit" type="button" aria-label="关闭记录编辑">×</button>
+      </header>
+
+      <div class="record-time-grid">
+        <label>上班时间<input id="recordClockIn" type="time" step="60"></label>
+        <label>下班时间<input id="recordClockOut" type="time" step="60"></label>
+        <label>计划下班<input id="recordPlannedEnd" type="time" step="60"></label>
       </div>
+      <div class="record-delete-row">
+        <button class="quiet-danger" id="deleteClockIn" type="button">删除上班打卡</button>
+        <button class="quiet-danger" id="deleteClockOut" type="button">删除下班打卡</button>
+      </div>
+
+      <section class="slacking-editor" aria-labelledby="slackingEditorTitle">
+        <div class="editor-section-title">
+          <div><span>摸鱼记录</span><strong id="slackingEditorTitle">当天的摸鱼小段</strong></div>
+          <button id="addSlackingSession" type="button">＋ 补录一段摸鱼</button>
+        </div>
+        <div id="slackingSessionList" class="session-list"></div>
+        <p class="editor-empty" id="slackingEmpty">这一天还没有摸鱼记录</p>
+      </section>
+
+      <div class="editor-actions">
+        <button id="cancelRecordEdit" type="button">取消</button>
+        <button class="save-time-button" id="saveRecordEdit" type="button">保存当天记录</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="bubble-dialog" id="bubbleDialog" aria-labelledby="bubbleTitle">
+    <div class="bubble-shell">
+      <header class="editor-header">
+        <div>
+          <p class="dialog-kicker">🫧 轻轻记一下</p>
+          <h2 id="bubbleTitle">今天的泡泡</h2>
+          <p id="bubbleDateLabel">今天</p>
+        </div>
+        <button class="close-button" id="closeBubble" type="button" aria-label="关闭泡泡">×</button>
+      </header>
+      <label class="bubble-composer">
+        <span>新泡泡</span>
+        <textarea id="bubbleInput" maxlength="500" placeholder="想吐槽什么就写两句……"></textarea>
+      </label>
+      <button class="blow-bubble-button" id="addBubble" type="button">吹个泡泡</button>
+      <div class="bubble-list" id="bubbleList"></div>
+      <p class="editor-empty" id="bubbleEmpty">今天还没有冒泡</p>
     </div>
   </dialog>
 
@@ -193,6 +236,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

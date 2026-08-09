@@ -21,7 +21,8 @@
     themeLabel: document.querySelector(".theme-button .button-label"),
     calendarButton: document.querySelector("#calendarButton"),
     dateLabel: document.querySelector("#dateLabel"),
-    dayToggle: document.querySelector("#dayToggle"),
+    bubbleButton: document.querySelector("#bubbleButton"),
+    overtimeButton: document.querySelector("#overtimeButton"),
     overline: document.querySelector("#overline"),
     heroTitle: document.querySelector("#heroTitle"),
     countdown: document.querySelector("#countdown"),
@@ -40,6 +41,7 @@
     clockOutValue: document.querySelector("#clockOutValue"),
     statusValue: document.querySelector("#statusValue"),
     slackingValue: document.querySelector("#slackingValue"),
+    slackingSummaryButton: document.querySelector("#slackingSummaryButton"),
     durationValue: document.querySelector("#durationValue"),
     speechBubble: document.querySelector("#speechBubble"),
     companionImage: document.querySelector("#companionImage"),
@@ -54,18 +56,35 @@
     selectedDateLabel: document.querySelector("#selectedDateLabel"),
     selectedDateStatus: document.querySelector("#selectedDateStatus"),
     selectedDateTimes: document.querySelector("#selectedDateTimes"),
+    selectedSlackingValue: document.querySelector("#selectedSlackingValue"),
+    selectedWorkedValue: document.querySelector("#selectedWorkedValue"),
+    selectedBubbleCount: document.querySelector("#selectedBubbleCount"),
+    editSelectedRecord: document.querySelector("#editSelectedRecord"),
+    viewSelectedBubbles: document.querySelector("#viewSelectedBubbles"),
     exportButton: document.querySelector("#exportButton"),
     importInput: document.querySelector("#importInput"),
     clearButton: document.querySelector("#clearButton"),
-    timeEditDialog: document.querySelector("#timeEditDialog"),
-    timeEditKicker: document.querySelector("#timeEditKicker"),
-    timeEditDialogTitle: document.querySelector("#timeEditDialogTitle"),
-    timeEditHelp: document.querySelector("#timeEditHelp"),
-    timeEditLabel: document.querySelector("#timeEditLabel"),
-    timeEditInput: document.querySelector("#timeEditInput"),
-    timeSaveScope: document.querySelector("#timeSaveScope"),
-    cancelTimeEdit: document.querySelector("#cancelTimeEdit"),
-    saveTimeEdit: document.querySelector("#saveTimeEdit"),
+    recordEditDialog: document.querySelector("#recordEditDialog"),
+    closeRecordEdit: document.querySelector("#closeRecordEdit"),
+    cancelRecordEdit: document.querySelector("#cancelRecordEdit"),
+    saveRecordEdit: document.querySelector("#saveRecordEdit"),
+    recordEditDate: document.querySelector("#recordEditDate"),
+    recordClockIn: document.querySelector("#recordClockIn"),
+    recordClockOut: document.querySelector("#recordClockOut"),
+    recordPlannedEnd: document.querySelector("#recordPlannedEnd"),
+    deleteClockIn: document.querySelector("#deleteClockIn"),
+    deleteClockOut: document.querySelector("#deleteClockOut"),
+    addSlackingSession: document.querySelector("#addSlackingSession"),
+    slackingSessionList: document.querySelector("#slackingSessionList"),
+    slackingEmpty: document.querySelector("#slackingEmpty"),
+    bubbleDialog: document.querySelector("#bubbleDialog"),
+    closeBubble: document.querySelector("#closeBubble"),
+    bubbleTitle: document.querySelector("#bubbleTitle"),
+    bubbleDateLabel: document.querySelector("#bubbleDateLabel"),
+    bubbleInput: document.querySelector("#bubbleInput"),
+    addBubble: document.querySelector("#addBubble"),
+    bubbleList: document.querySelector("#bubbleList"),
+    bubbleEmpty: document.querySelector("#bubbleEmpty"),
     celebrationLayer: document.querySelector("#celebrationLayer"),
     toast: document.querySelector("#toast")
   };
@@ -76,8 +95,8 @@
   let selectedDateKey = getDateKey(new Date());
   let toastTimer = 0;
   let lastRenderedDate = selectedDateKey;
-  let editMode = "clockIn";
-  const tapTimers = { clockIn: 0, clockOut: 0 };
+  let editingRecordDateKey = selectedDateKey;
+  let bubbleDateKey = selectedDateKey;
 
   function loadState() {
     try {
@@ -127,6 +146,34 @@
     const target = new Date(date);
     target.setHours(hours, minutes, 0, 0);
     return target;
+  }
+
+  function getDateFromKey(dateKey) {
+    const [year, month, day] = dateKey.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  function getDateTimeFromKey(dateKey, time) {
+    if (!isValidTime(time)) return null;
+    const date = getDateFromKey(dateKey);
+    const [hours, minutes] = time.split(":").map(Number);
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  }
+
+  function formatTimeInput(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function getBubbles(record) {
+    return Array.isArray(record.bubbles) ? record.bubbles : [];
+  }
+
+  function makeId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   function getDateKey(date) {
@@ -248,6 +295,42 @@
     return worked === null ? null : worked / 60000;
   }
 
+  function calculateCurrentWorkedMilliseconds(record, now = new Date()) {
+    if (!record.clockIn || record.clockOut) return calculateWorkedMilliseconds(record);
+    const start = new Date(record.clockIn).getTime();
+    const end = new Date(now).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+    return Math.max(0, end - start - calculateSlackingMilliseconds(record, now));
+  }
+
+  function closeActiveSlackingAt(record, endDate) {
+    const sessions = getSlackingSessions(record);
+    const active = getActiveSlackingSession(record);
+    if (!active) return;
+    const start = new Date(active.start).getTime();
+    if (Number.isFinite(start) && start < endDate.getTime()) active.end = endDate.toISOString();
+    else record.slackingSessions = sessions.filter((session) => session !== active);
+  }
+
+  function autoCloseEligibleRecords(now = new Date()) {
+    let changed = false;
+    Object.entries(state.records).forEach(([dateKey, record]) => {
+      if (!record?.clockIn || record.clockOut || record.overtimeOverride === true) return;
+      const date = getDateFromKey(dateKey);
+      if (!Number.isFinite(date.getTime())) return;
+      const target = getEndTarget(date, getPlannedEndTime(record));
+      const clockIn = new Date(record.clockIn);
+      if (!Number.isFinite(clockIn.getTime()) || target <= clockIn || now < target) return;
+      closeActiveSlackingAt(record, target);
+      record.clockOut = target.toISOString();
+      record.clockOutSource = "auto";
+      record.workedMinutes = calculateWorkedMinutes(record);
+      changed = true;
+    });
+    if (changed) saveState();
+    return changed;
+  }
+
   function getTodayContext(now = new Date()) {
     const dateKey = getDateKey(now);
     const record = getRecord(dateKey);
@@ -280,6 +363,7 @@
   }
 
   function renderToday(now = new Date()) {
+    autoCloseEligibleRecords(now);
     const { dateKey, record, rest } = getTodayContext(now);
     if (dateKey !== lastRenderedDate) {
       lastRenderedDate = dateKey;
@@ -306,8 +390,10 @@
     elements.body.classList.toggle("is-complete", Boolean(record.clockOut));
     elements.body.classList.toggle("is-overtime", isOvertime);
     elements.body.classList.toggle("is-slacking", slacking);
-    elements.dayToggle.textContent = rest ? "切换为工作日" : "今天休息";
-    elements.dayToggle.setAttribute("aria-pressed", String(rest));
+    const canMarkOvertime = record.clockIn && !record.clockOut && !record.overtimeOverride && target - now <= 30 * 60000;
+    const canUndoAutoClockOut = record.clockOut && record.clockOutSource === "auto";
+    elements.overtimeButton.hidden = !(canMarkOvertime || canUndoAutoClockOut);
+    elements.overtimeButton.textContent = canUndoAutoClockOut ? "其实还在加班" : "还在加班";
 
     if (rest) {
       elements.overline.textContent = "今天不用倒数";
@@ -346,7 +432,10 @@
     elements.clockInValue.textContent = formatClock(record.clockIn);
     elements.clockOutValue.textContent = formatClock(record.clockOut);
     const slackingMilliseconds = calculateSlackingMilliseconds(record, now);
-    const workedMinutes = record.clockOut ? (record.workedMinutes ?? calculateWorkedMinutes(record)) : null;
+    const currentWorkedMilliseconds = calculateCurrentWorkedMilliseconds(record, now);
+    const workedMinutes = record.clockOut
+      ? (record.workedMinutes ?? calculateWorkedMinutes(record))
+      : currentWorkedMilliseconds === null ? null : currentWorkedMilliseconds / 60000;
     const summaryStatus = rest
       ? "休息中"
       : record.clockOut
@@ -357,7 +446,7 @@
     elements.statusValue.textContent = summaryStatus;
     elements.slackingValue.textContent = formatCompactDuration(slackingMilliseconds / 60000);
     elements.durationValue.textContent = workedMinutes === null
-      ? record.clockIn ? "等待下班" : "等待记录"
+      ? "等待记录"
       : formatCompactDuration(workedMinutes);
 
     elements.clockInButton.disabled = rest;
@@ -384,31 +473,15 @@
       : slacking
         ? `结束摸鱼，当前累计 ${formatStopwatch(slackingMilliseconds)}`
         : "开始摸鱼");
-    elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；单击取消，双击修改` : "上班打卡");
+    elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；点击编辑` : "上班打卡");
     elements.clockOutButton.setAttribute("aria-label", record.clockOut
-      ? `下班打卡时间 ${formatClock(record.clockOut)}；单击取消，双击修改`
-      : `下班打卡；当前计划 ${plannedEndTime} 下班，单击打卡，双击调整计划时间`);
+      ? `下班打卡时间 ${formatClock(record.clockOut)}；点击编辑`
+      : `下班打卡；当前计划 ${plannedEndTime} 下班`);
 
   }
 
   function hashDate(dateKey) {
     return [...dateKey].reduce((total, char) => total + char.charCodeAt(0), 0);
-  }
-
-  function toggleRestDay() {
-    const now = new Date();
-    const dateKey = getDateKey(now);
-    const record = ensureRecord(dateKey);
-    if (isRestDay(now, dateKey)) delete record.restOverride;
-    else {
-      record.restOverride = true;
-      const activeSession = getActiveSlackingSession(record);
-      if (activeSession) activeSession.end = now.toISOString();
-    }
-    saveState();
-    showToast(record.restOverride ? "今天已标记为休息日" : "已恢复为工作日");
-    renderToday(now);
-    renderCalendar();
   }
 
   function clockIn() {
@@ -426,161 +499,246 @@
     renderCalendar();
   }
 
-  function openTimeEditor(mode) {
-    const { record, rest } = getTodayContext();
-    const value = record[mode];
-    if (rest || !value) return;
-    editMode = mode;
-    const editingClockIn = mode === "clockIn";
-    const punchDate = new Date(value);
-    elements.timeEditKicker.textContent = "补录实际时间";
-    elements.timeEditDialogTitle.textContent = editingClockIn ? "修改上班时间" : "修改下班时间";
-    elements.timeEditHelp.textContent = editingClockIn
-      ? "选择今天真正开始工作的时间，今日工作时长会自动更新。"
-      : "选择今天真正结束工作的时间，今日工作时长会自动更新。";
-    elements.timeEditLabel.textContent = editingClockIn ? "今天几点开始工作？" : "今天几点结束工作？";
-    elements.timeEditInput.value = `${String(punchDate.getHours()).padStart(2, "0")}:${String(punchDate.getMinutes()).padStart(2, "0")}`;
-    elements.timeSaveScope.hidden = true;
-    if (typeof elements.timeEditDialog.showModal === "function") {
-      elements.timeEditDialog.showModal();
+  function showDialog(dialog) {
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+
+  function closeDialog(dialog) {
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+  }
+
+  function appendSlackingRow(start = "", end = "") {
+    const row = document.createElement("div");
+    row.className = "session-row";
+    row.innerHTML = `
+      <label>开始<input class="session-start" type="time" step="60" value="${start}"></label>
+      <label>结束<input class="session-end" type="time" step="60" value="${end}"></label>
+      <button class="session-delete" type="button" aria-label="删除这段摸鱼">删除</button>`;
+    row.querySelector(".session-delete").addEventListener("click", () => {
+      row.remove();
+      elements.slackingEmpty.hidden = Boolean(elements.slackingSessionList.children.length);
+    });
+    elements.slackingSessionList.append(row);
+    elements.slackingEmpty.hidden = true;
+  }
+
+  function openRecordEditor(dateKey = selectedDateKey, focusMode = "") {
+    editingRecordDateKey = dateKey;
+    const record = getRecord(dateKey);
+    const date = getDateFromKey(dateKey);
+    elements.recordEditDate.textContent = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric", month: "long", day: "numeric", weekday: "short"
+    }).format(date);
+    elements.recordClockIn.value = formatTimeInput(record.clockIn);
+    elements.recordClockOut.value = formatTimeInput(record.clockOut);
+    elements.recordPlannedEnd.value = getPlannedEndTime(record);
+    elements.deleteClockIn.hidden = !record.clockIn;
+    elements.deleteClockOut.hidden = !record.clockOut;
+    elements.slackingSessionList.replaceChildren();
+    getSlackingSessions(record).forEach((session) => {
+      appendSlackingRow(formatTimeInput(session.start), formatTimeInput(session.end));
+    });
+    elements.slackingEmpty.hidden = Boolean(elements.slackingSessionList.children.length);
+    showDialog(elements.recordEditDialog);
+    if (focusMode === "clockIn") elements.recordClockIn.focus();
+    if (focusMode === "clockOut") elements.recordClockOut.focus();
+  }
+
+  function deletePunchFromEditor(mode) {
+    const label = mode === "clockIn" ? "上班" : "下班";
+    const dateText = editingRecordDateKey === getDateKey(new Date()) ? "今天的" : "这一天的";
+    if (!window.confirm(`确定取消${dateText}${label}打卡吗？`)) return;
+    const record = ensureRecord(editingRecordDateKey);
+    if (mode === "clockIn") {
+      delete record.clockIn;
+      delete record.clockOut;
+      delete record.clockOutSource;
+      delete record.workedMinutes;
+      delete record.slackingSessions;
+      elements.recordClockIn.value = "";
+      elements.recordClockOut.value = "";
+      elements.slackingSessionList.replaceChildren();
     } else {
-      elements.timeEditDialog.setAttribute("open", "");
+      delete record.clockOut;
+      delete record.clockOutSource;
+      delete record.workedMinutes;
+      elements.recordClockOut.value = "";
     }
+    saveState();
+    elements.deleteClockIn.hidden = !record.clockIn;
+    elements.deleteClockOut.hidden = !record.clockOut;
+    elements.slackingEmpty.hidden = Boolean(elements.slackingSessionList.children.length);
+    renderToday();
+    renderCalendar();
+    showToast(`${label}打卡已删除`);
   }
 
-  function openPlannedEndEditor() {
-    const { record, rest } = getTodayContext();
-    if (rest || !record.clockIn || record.clockOut) return;
-    editMode = "plannedEnd";
-    elements.timeEditKicker.textContent = "调整倒计时";
-    elements.timeEditDialogTitle.textContent = "调整计划下班时间";
-    elements.timeEditHelp.textContent = "只改变倒计时目标，不会生成下班打卡，也不会修改已有记录。";
-    elements.timeEditLabel.textContent = "今天计划几点下班？";
-    elements.timeEditInput.value = getPlannedEndTime(record);
-    elements.timeSaveScope.hidden = false;
-    const todayScope = elements.timeSaveScope.querySelector('input[value="today"]');
-    if (todayScope) todayScope.checked = true;
-    if (typeof elements.timeEditDialog.showModal === "function") {
-      elements.timeEditDialog.showModal();
-    } else {
-      elements.timeEditDialog.setAttribute("open", "");
-    }
-  }
-
-  function closeTimeEditor() {
-    if (typeof elements.timeEditDialog.close === "function") elements.timeEditDialog.close();
-    else elements.timeEditDialog.removeAttribute("open");
-  }
-
-  function saveEditedTime() {
-    const value = elements.timeEditInput.value;
-    if (!isValidTime(value)) {
-      showToast("请先选择打卡时间");
-      return;
-    }
-
+  function collectSlackingSessions(dateKey, clockIn, clockOut) {
     const now = new Date();
-    const dateKey = getDateKey(now);
-    const record = ensureRecord(dateKey);
+    const todayKey = getDateKey(now);
+    const rows = [...elements.slackingSessionList.querySelectorAll(".session-row")];
+    const sessions = rows.map((row) => {
+      const startValue = row.querySelector(".session-start").value;
+      const endValue = row.querySelector(".session-end").value;
+      const start = getDateTimeFromKey(dateKey, startValue);
+      const end = endValue ? getDateTimeFromKey(dateKey, endValue) : null;
+      if (!start || (endValue && !end)) throw new Error("请填写正确的摸鱼时间");
+      if (end && start >= end) throw new Error("摸鱼的结束时间要晚于开始时间");
+      if (!end && (dateKey !== todayKey || clockOut)) throw new Error("历史记录或已下班记录需要填写摸鱼结束时间");
+      const effectiveEnd = end || now;
+      if (clockIn && start < clockIn) throw new Error("摸鱼时间不能早于上班时间");
+      if (clockOut && effectiveEnd > clockOut) throw new Error("摸鱼时间不能晚于下班时间");
+      if (!clockOut && dateKey === todayKey && effectiveEnd > now) throw new Error("摸鱼结束时间不能晚于现在");
+      return { start: start.toISOString(), ...(end ? { end: end.toISOString() } : {}) };
+    }).sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    if (editMode === "plannedEnd") {
-      const scope = elements.timeSaveScope.querySelector('input[name="endTimeScope"]:checked')?.value || "today";
-      if (scope === "default") {
-        settings.defaultEndTime = value;
-        saveSettings();
-        delete record.plannedEndTime;
-        showToast(`默认下班时间已改为 ${value}`);
-      } else {
-        record.plannedEndTime = value;
-        showToast(`今天改为 ${value} 下班`);
-      }
-      saveState();
-      closeTimeEditor();
-      renderToday(now);
-      renderCalendar();
+    for (let index = 1; index < sessions.length; index += 1) {
+      const previousEnd = sessions[index - 1].end ? new Date(sessions[index - 1].end) : now;
+      if (new Date(sessions[index].start) < previousEnd) throw new Error("摸鱼记录不能互相重叠");
+    }
+    return sessions;
+  }
+
+  function saveRecordEditor() {
+    const now = new Date();
+    const dateKey = editingRecordDateKey;
+    if (getDateFromKey(dateKey) > new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+      showToast("未来日期暂时不能补打卡");
       return;
     }
-
-    const [hours, minutes] = value.split(":").map(Number);
-    const revisedTime = new Date(now);
-    revisedTime.setHours(hours, minutes, 0, 0);
-
-    if (revisedTime > now) {
-      showToast("打卡时间不能晚于现在");
+    const clockIn = elements.recordClockIn.value ? getDateTimeFromKey(dateKey, elements.recordClockIn.value) : null;
+    const clockOut = elements.recordClockOut.value ? getDateTimeFromKey(dateKey, elements.recordClockOut.value) : null;
+    if (elements.recordClockIn.value && !clockIn || elements.recordClockOut.value && !clockOut) {
+      showToast("请填写正确的打卡时间");
       return;
     }
-    if (editMode === "clockIn" && record.clockOut && revisedTime >= new Date(record.clockOut)) {
-      showToast("上班时间需要早于下班时间");
+    if (clockOut && !clockIn) {
+      showToast("请先补上班时间");
       return;
     }
-    if (editMode === "clockOut" && record.clockIn && revisedTime <= new Date(record.clockIn)) {
+    if (clockIn && clockOut && clockOut <= clockIn) {
       showToast("下班时间需要晚于上班时间");
       return;
     }
-
-    record[editMode] = revisedTime.toISOString();
-    if (record.clockOut) record.workedMinutes = calculateWorkedMinutes(record);
-    saveState();
-    closeTimeEditor();
-    renderToday(now);
-    renderCalendar();
-    showToast(`${editMode === "clockIn" ? "上班" : "下班"}时间已修改为 ${formatClock(record[editMode]).slice(0, 5)}`);
+    if (dateKey === getDateKey(now) && ((clockIn && clockIn > now) || (clockOut && clockOut > now))) {
+      showToast("今天的打卡时间不能晚于现在");
+      return;
+    }
+    try {
+      const sessions = collectSlackingSessions(dateKey, clockIn, clockOut);
+      const record = ensureRecord(dateKey);
+      const previousClockOut = record.clockOut;
+      const previousSource = record.clockOutSource;
+      if (clockIn) record.clockIn = clockIn.toISOString();
+      else delete record.clockIn;
+      if (clockOut) {
+        record.clockOut = clockOut.toISOString();
+        const unchangedAutoTime = previousSource === "auto"
+          && formatTimeInput(previousClockOut) === elements.recordClockOut.value;
+        record.clockOutSource = unchangedAutoTime ? "auto" : "manual";
+        delete record.overtimeOverride;
+      } else {
+        delete record.clockOut;
+        delete record.clockOutSource;
+        delete record.workedMinutes;
+      }
+      record.slackingSessions = sessions;
+      if (!sessions.length) delete record.slackingSessions;
+      const planned = elements.recordPlannedEnd.value;
+      if (!isValidTime(planned)) throw new Error("请填写正确的计划下班时间");
+      if (planned === settings.defaultEndTime) delete record.plannedEndTime;
+      else record.plannedEndTime = planned;
+      if (record.clockOut) record.workedMinutes = calculateWorkedMinutes(record);
+      saveState();
+      closeDialog(elements.recordEditDialog);
+      renderToday();
+      renderCalendar();
+      showToast("当天记录已保存");
+    } catch (error) {
+      showToast(error.message || "记录没有保存，请检查时间");
+    }
   }
 
-  function cancelPunch(mode) {
-    const { dateKey, record } = getTodayContext();
-    if (!record[mode]) return;
-    const label = mode === "clockIn" ? "上班" : "下班";
-    const extra = mode === "clockIn" && record.clockOut ? "，下班打卡也会一并取消" : "";
-    if (!window.confirm(`确定取消今天的${label}打卡吗${extra}？`)) return;
-    const target = ensureRecord(dateKey);
-    if (mode === "clockIn") {
-      delete target.clockIn;
-      delete target.clockOut;
-      delete target.slackingSessions;
-    } else {
-      delete target.clockOut;
-    }
-    delete target.workedMinutes;
+  function openBubbles(dateKey = getDateKey(new Date())) {
+    bubbleDateKey = dateKey;
+    const date = getDateFromKey(dateKey);
+    const today = dateKey === getDateKey(new Date());
+    elements.bubbleTitle.textContent = today ? "今天的泡泡" : "那天的泡泡";
+    elements.bubbleDateLabel.textContent = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric", month: "long", day: "numeric", weekday: "short"
+    }).format(date);
+    elements.bubbleInput.value = "";
+    renderBubbleList();
+    showDialog(elements.bubbleDialog);
+  }
+
+  function renderBubbleList() {
+    const record = getRecord(bubbleDateKey);
+    const bubbles = getBubbles(record);
+    elements.bubbleList.replaceChildren();
+    bubbles.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).forEach((bubble) => {
+      const item = document.createElement("article");
+      item.className = "bubble-item";
+      const time = document.createElement("time");
+      time.textContent = formatClock(bubble.createdAt).slice(0, 5);
+      const textarea = document.createElement("textarea");
+      textarea.maxLength = 500;
+      textarea.value = String(bubble.text || "");
+      const actions = document.createElement("div");
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "保存修改";
+      save.addEventListener("click", () => {
+        const text = textarea.value.trim();
+        if (!text) return showToast("泡泡里还没有文字");
+        bubble.text = text;
+        saveState();
+        renderSelectedDate(getDateFromKey(bubbleDateKey), getRecord(bubbleDateKey), isRestDay(getDateFromKey(bubbleDateKey), bubbleDateKey));
+        showToast("泡泡已更新");
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "quiet-danger";
+      remove.textContent = "删除";
+      remove.addEventListener("click", () => {
+        if (!window.confirm("确定删除这条泡泡吗？")) return;
+        const target = ensureRecord(bubbleDateKey);
+        target.bubbles = getBubbles(target).filter((entry) => entry.id !== bubble.id);
+        if (!target.bubbles.length) delete target.bubbles;
+        saveState();
+        renderBubbleList();
+        renderCalendar();
+      });
+      actions.append(save, remove);
+      item.append(time, textarea, actions);
+      elements.bubbleList.append(item);
+    });
+    elements.bubbleEmpty.hidden = Boolean(bubbles.length);
+  }
+
+  function addBubble() {
+    const text = elements.bubbleInput.value.trim();
+    if (!text) return showToast("想吐槽什么就先写两句吧");
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const createdAt = getDateTimeFromKey(bubbleDateKey, time);
+    const record = ensureRecord(bubbleDateKey);
+    record.bubbles ||= [];
+    record.bubbles.push({ id: makeId("bubble"), createdAt: createdAt.toISOString(), text });
     saveState();
-    renderToday();
+    elements.bubbleInput.value = "";
+    renderBubbleList();
     renderCalendar();
-    showToast(`${label}打卡已取消`);
+    showToast("泡泡吹出去啦");
   }
 
   function handlePunchAction(mode) {
     const { record } = getTodayContext();
-    if (!record[mode]) {
-      if (mode === "clockIn") {
-        clockIn();
-        return;
-      }
-
-      if (tapTimers.clockOut) {
-        window.clearTimeout(tapTimers.clockOut);
-        tapTimers.clockOut = 0;
-        openPlannedEndEditor();
-        return;
-      }
-
-      tapTimers.clockOut = window.setTimeout(() => {
-        tapTimers.clockOut = 0;
-        clockOut();
-      }, 280);
-      return;
-    }
-
-    if (tapTimers[mode]) {
-      window.clearTimeout(tapTimers[mode]);
-      tapTimers[mode] = 0;
-      openTimeEditor(mode);
-      return;
-    }
-
-    tapTimers[mode] = window.setTimeout(() => {
-      tapTimers[mode] = 0;
-      cancelPunch(mode);
-    }, 280);
+    if (record[mode]) return openRecordEditor(getDateKey(new Date()), mode);
+    if (mode === "clockIn") clockIn();
+    else clockOut();
   }
 
   function clockOut() {
@@ -591,12 +749,35 @@
     const activeSession = getActiveSlackingSession(target);
     if (activeSession) activeSession.end = now.toISOString();
     target.clockOut = now.toISOString();
+    target.clockOutSource = "manual";
     target.workedMinutes = calculateWorkedMinutes(target);
     saveState();
     renderToday(now);
     renderCalendar();
     launchCelebration();
     showToast(`下班打卡成功 · 实际工作 ${formatDuration(target.workedMinutes)}`);
+  }
+
+  function toggleOvertimeOverride() {
+    const now = new Date();
+    const { dateKey, record } = getTodayContext(now);
+    const target = ensureRecord(dateKey);
+    if (record.clockOutSource === "auto" && record.clockOut) {
+      delete target.clockOut;
+      delete target.clockOutSource;
+      delete target.workedMinutes;
+      target.overtimeOverride = true;
+      saveState();
+      renderToday(now);
+      renderCalendar();
+      showToast("已撤销自动下班，继续加班中");
+      return;
+    }
+    if (!record.clockIn || record.clockOut) return;
+    target.overtimeOverride = true;
+    saveState();
+    renderToday(now);
+    showToast("收到，今天继续加班");
   }
 
   function toggleSlacking() {
@@ -710,23 +891,24 @@
       weekday: "short"
     }).format(date);
 
-    if (record.clockIn && record.clockOut) {
-      const attendance = calculateAttendanceMilliseconds(record) / 60000;
-      const slacking = calculateSlackingMilliseconds(record, new Date(record.clockOut)) / 60000;
-      const worked = record.workedMinutes ?? calculateWorkedMinutes(record);
-      elements.selectedDateStatus.textContent = `实际工作 ${formatDuration(worked)} · 摸鱼 ${formatCompactDuration(slacking)}`;
-      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 上班 · ${formatClock(record.clockOut)} 下班 · 总时长 ${formatCompactDuration(attendance)}`;
-    } else if (record.clockIn) {
-      const slacking = calculateSlackingMilliseconds(record) / 60000;
-      elements.selectedDateStatus.textContent = isSlacking(record) ? `摸鱼中 · 已累计 ${formatCompactDuration(slacking)}` : "已上班打卡";
-      elements.selectedDateTimes.textContent = `${formatClock(record.clockIn)} 开始 · 尚未下班打卡 · 摸鱼 ${formatCompactDuration(slacking)}`;
-    } else if (rest) {
-      elements.selectedDateStatus.textContent = "休息日";
-      elements.selectedDateTimes.textContent = "今天没有打卡记录";
-    } else {
-      elements.selectedDateStatus.textContent = "没有记录";
-      elements.selectedDateTimes.textContent = "这一天还没有留下打卡时间";
+    const until = record.clockOut ? new Date(record.clockOut) : new Date();
+    const slacking = calculateSlackingMilliseconds(record, until) / 60000;
+    const workedMilliseconds = calculateCurrentWorkedMilliseconds(record, new Date());
+    const worked = record.clockOut
+      ? (record.workedMinutes ?? calculateWorkedMinutes(record))
+      : workedMilliseconds === null ? null : workedMilliseconds / 60000;
+    const target = getEndTarget(date, getPlannedEndTime(record));
+    let status = rest ? "休息日" : "没有记录";
+    if (record.clockIn && !record.clockOut) status = record.overtimeOverride ? "加班中" : "进行中";
+    if (record.clockOut) {
+      if (record.clockOutSource === "auto") status = "自动下班 · 自动补卡";
+      else status = new Date(record.clockOut) > target ? "加班完成" : "正常下班";
     }
+    elements.selectedDateStatus.textContent = status;
+    elements.selectedDateTimes.textContent = `上班：${formatClock(record.clockIn)} · 下班：${formatClock(record.clockOut)}`;
+    elements.selectedSlackingValue.textContent = formatCompactDuration(slacking);
+    elements.selectedWorkedValue.textContent = worked === null ? "等待记录" : formatCompactDuration(worked);
+    elements.selectedBubbleCount.textContent = `${getBubbles(record).length} 条`;
   }
 
   function openCalendar() {
@@ -817,22 +999,34 @@
     selectedDateKey = getDateKey(calendarCursor);
     renderCalendar();
   });
-  elements.dayToggle?.addEventListener("click", toggleRestDay);
+  elements.bubbleButton?.addEventListener("click", () => openBubbles(getDateKey(new Date())));
+  elements.overtimeButton?.addEventListener("click", toggleOvertimeOverride);
   elements.clockInButton?.addEventListener("click", () => handlePunchAction("clockIn"));
   elements.clockOutButton?.addEventListener("click", () => handlePunchAction("clockOut"));
   elements.slackingButton?.addEventListener("click", toggleSlacking);
-  elements.clockInButton?.addEventListener("dblclick", (event) => event.preventDefault());
-  elements.clockOutButton?.addEventListener("dblclick", (event) => event.preventDefault());
-  elements.cancelTimeEdit?.addEventListener("click", closeTimeEditor);
-  elements.saveTimeEdit?.addEventListener("click", saveEditedTime);
-  elements.timeEditDialog?.addEventListener("click", (event) => {
-    if (event.target === elements.timeEditDialog) closeTimeEditor();
-  });
+  elements.slackingSummaryButton?.addEventListener("click", () => openRecordEditor(getDateKey(new Date())));
   elements.exportButton?.addEventListener("click", exportData);
   elements.importInput?.addEventListener("change", importData);
   elements.clearButton?.addEventListener("click", clearData);
+  elements.editSelectedRecord?.addEventListener("click", () => openRecordEditor(selectedDateKey));
+  elements.viewSelectedBubbles?.addEventListener("click", () => openBubbles(selectedDateKey));
+  elements.closeRecordEdit?.addEventListener("click", () => closeDialog(elements.recordEditDialog));
+  elements.cancelRecordEdit?.addEventListener("click", () => closeDialog(elements.recordEditDialog));
+  elements.saveRecordEdit?.addEventListener("click", saveRecordEditor);
+  elements.addSlackingSession?.addEventListener("click", () => appendSlackingRow());
+  elements.deleteClockIn?.addEventListener("click", () => deletePunchFromEditor("clockIn"));
+  elements.deleteClockOut?.addEventListener("click", () => deletePunchFromEditor("clockOut"));
+  elements.recordEditDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.recordEditDialog) closeDialog(elements.recordEditDialog);
+  });
+  elements.closeBubble?.addEventListener("click", () => closeDialog(elements.bubbleDialog));
+  elements.addBubble?.addEventListener("click", addBubble);
+  elements.bubbleDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.bubbleDialog) closeDialog(elements.bubbleDialog);
+  });
 
   updateTheme(localStorage.getItem(THEME_KEY) || "minimal", false);
+  autoCloseEligibleRecords();
   renderToday();
   renderCalendar();
   document.body.dataset.ready = "true";
