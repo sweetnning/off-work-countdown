@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body data-theme="minimal">
   <!--
@@ -52,7 +52,7 @@
         <div class="hero-copy">
           <div class="eyebrow-row">
             <p class="date-label" id="dateLabel">正在读取日期</p>
-            <button class="day-toggle bubble-button" id="bubbleButton" type="button">🫧 泡泡</button>
+            <button class="day-toggle bubble-button" id="bubbleButton" type="button">🫧 泡泡<span id="bubbleButtonCount"></span></button>
           </div>
 
           <div class="headline-wrap">
@@ -99,7 +99,7 @@
               <div><span>上班</span><strong id="clockInValue">未打卡</strong></div>
               <div><span>下班</span><strong id="clockOutValue">未打卡</strong></div>
               <div class="status-cell"><span>状态</span><strong id="statusValue">未开始</strong></div>
-              <button class="summary-entry slacking-cell" id="slackingSummaryButton" type="button"><span>摸鱼</span><strong id="slackingValue">0 分钟</strong></button>
+              <button class="summary-entry slacking-cell" id="slackingSummaryButton" type="button"><span id="slackingSummaryLabel">今日摸鱼</span><strong id="slackingValue">0 分钟</strong></button>
               <div class="duration-cell"><span>实际工作</span><strong id="durationValue">等待记录</strong></div>
             </div>
           </div>
@@ -135,29 +135,30 @@
         <button id="nextMonth" type="button" aria-label="下个月">→</button>
       </div>
 
-      <div class="weekdays" aria-hidden="true">
-        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
-      </div>
-      <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="打卡月历"></div>
-
       <div class="selected-day" id="selectedDayPanel">
         <img src="assets/record-pencil.png" alt="记录贴图" loading="lazy" decoding="async">
         <div class="selected-day-content">
           <span id="selectedDateLabel">选择一个日期</span>
           <strong id="selectedDateStatus">查看当天记录</strong>
           <small id="selectedDateTimes">上班与下班时间会显示在这里</small>
+          <button class="selected-auto-overtime" id="selectedAutoOvertime" type="button" hidden>今天其实加班了</button>
           <div class="selected-metrics">
             <small>摸鱼 <b id="selectedSlackingValue">0 分钟</b></small>
             <small>实际工作 <b id="selectedWorkedValue">等待记录</b></small>
             <small>泡泡 <b id="selectedBubbleCount">0 条</b></small>
           </div>
-          <div class="selected-actions">
-            <button id="editSelectedRecord" type="button">编辑当天记录</button>
-            <button class="rest-action" id="toggleSelectedRest" type="button" aria-pressed="false">标记为休息日</button>
-            <button id="viewSelectedBubbles" type="button">查看泡泡</button>
+          <div class="selected-actions" aria-label="当天快捷操作">
+            <button id="editSelectedRecord" type="button">编辑记录</button>
+            <button class="rest-action" id="toggleSelectedRest" type="button" aria-pressed="false">🌙 设为休息日</button>
+            <button id="viewSelectedBubbles" type="button">🫧 泡泡</button>
           </div>
         </div>
       </div>
+
+      <div class="weekdays" aria-hidden="true">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="打卡月历"></div>
 
       <div class="data-actions">
         <button id="exportButton" type="button">导出备份</button>
@@ -189,14 +190,35 @@
         <button class="quiet-danger" id="deleteClockOut" type="button">删除下班打卡</button>
       </div>
 
-      <section class="slacking-editor" aria-labelledby="slackingEditorTitle">
+      <section class="quick-slacking" aria-labelledby="quickSlackingTitle">
         <div class="editor-section-title">
-          <div><span>摸鱼记录</span><strong id="slackingEditorTitle">当天的摸鱼小段</strong></div>
-          <button id="addSlackingSession" type="button">＋ 补录一段摸鱼</button>
+          <div><span>忘记点了也没关系</span><strong id="quickSlackingTitle">快速补摸鱼</strong></div>
+          <small id="quickSlackingTotal">今日摸鱼 0 分钟</small>
         </div>
-        <div id="slackingSessionList" class="session-list"></div>
-        <p class="editor-empty" id="slackingEmpty">这一天还没有摸鱼记录</p>
+        <div class="quick-slacking-actions" aria-label="快速补摸鱼时长">
+          <button type="button" data-quick-slacking="5">+ 5 分钟</button>
+          <button type="button" data-quick-slacking="10">+ 10 分钟</button>
+          <button type="button" data-quick-slacking="15">+ 15 分钟</button>
+          <button type="button" data-quick-slacking="30">+ 30 分钟</button>
+          <button type="button" id="showCustomSlacking">自定义</button>
+        </div>
+        <div class="custom-slacking-row" id="customSlackingRow" hidden>
+          <label><input id="customSlackingMinutes" type="number" min="1" max="720" inputmode="numeric" placeholder="25"> 分钟</label>
+          <button id="addCustomSlacking" type="button">补上这一段</button>
+        </div>
       </section>
+
+      <details class="precise-slacking" id="preciseSlackingDetails">
+        <summary>精确编辑时间段</summary>
+        <section class="slacking-editor" aria-labelledby="slackingEditorTitle">
+          <div class="editor-section-title">
+            <div><span>需要时再调整</span><strong id="slackingEditorTitle">当天的摸鱼小段</strong></div>
+            <button id="addSlackingSession" type="button">＋ 新增时间段</button>
+          </div>
+          <div id="slackingSessionList" class="session-list"></div>
+          <p class="editor-empty" id="slackingEmpty">这一天还没有摸鱼记录</p>
+        </section>
+      </details>
 
       <div class="editor-actions">
         <button id="cancelRecordEdit" type="button">取消</button>
@@ -226,7 +248,10 @@
   </dialog>
 
   <div class="celebration-layer" id="celebrationLayer" aria-hidden="true"></div>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span id="toastMessage"></span>
+    <button id="toastUndo" type="button" hidden>撤销</button>
+  </div>
   <div class="load-error" id="loadError" role="alert" hidden>
     <strong>页面刚刚更新，请刷新一下</strong>
     <button type="button" onclick="location.reload()">重新加载</button>
@@ -237,6 +262,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

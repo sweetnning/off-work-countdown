@@ -22,6 +22,7 @@
     calendarButton: document.querySelector("#calendarButton"),
     dateLabel: document.querySelector("#dateLabel"),
     bubbleButton: document.querySelector("#bubbleButton"),
+    bubbleButtonCount: document.querySelector("#bubbleButtonCount"),
     overtimeButton: document.querySelector("#overtimeButton"),
     overline: document.querySelector("#overline"),
     heroTitle: document.querySelector("#heroTitle"),
@@ -41,6 +42,7 @@
     clockOutValue: document.querySelector("#clockOutValue"),
     statusValue: document.querySelector("#statusValue"),
     slackingValue: document.querySelector("#slackingValue"),
+    slackingSummaryLabel: document.querySelector("#slackingSummaryLabel"),
     slackingSummaryButton: document.querySelector("#slackingSummaryButton"),
     durationValue: document.querySelector("#durationValue"),
     speechBubble: document.querySelector("#speechBubble"),
@@ -61,6 +63,7 @@
     selectedBubbleCount: document.querySelector("#selectedBubbleCount"),
     editSelectedRecord: document.querySelector("#editSelectedRecord"),
     toggleSelectedRest: document.querySelector("#toggleSelectedRest"),
+    selectedAutoOvertime: document.querySelector("#selectedAutoOvertime"),
     viewSelectedBubbles: document.querySelector("#viewSelectedBubbles"),
     exportButton: document.querySelector("#exportButton"),
     importInput: document.querySelector("#importInput"),
@@ -76,6 +79,13 @@
     deleteClockIn: document.querySelector("#deleteClockIn"),
     deleteClockOut: document.querySelector("#deleteClockOut"),
     addSlackingSession: document.querySelector("#addSlackingSession"),
+    preciseSlackingDetails: document.querySelector("#preciseSlackingDetails"),
+    quickSlackingTotal: document.querySelector("#quickSlackingTotal"),
+    quickSlackingButtons: [...document.querySelectorAll("[data-quick-slacking]")],
+    showCustomSlacking: document.querySelector("#showCustomSlacking"),
+    customSlackingRow: document.querySelector("#customSlackingRow"),
+    customSlackingMinutes: document.querySelector("#customSlackingMinutes"),
+    addCustomSlacking: document.querySelector("#addCustomSlacking"),
     slackingSessionList: document.querySelector("#slackingSessionList"),
     slackingEmpty: document.querySelector("#slackingEmpty"),
     bubbleDialog: document.querySelector("#bubbleDialog"),
@@ -87,7 +97,9 @@
     bubbleList: document.querySelector("#bubbleList"),
     bubbleEmpty: document.querySelector("#bubbleEmpty"),
     celebrationLayer: document.querySelector("#celebrationLayer"),
-    toast: document.querySelector("#toast")
+    toast: document.querySelector("#toast"),
+    toastMessage: document.querySelector("#toastMessage"),
+    toastUndo: document.querySelector("#toastUndo")
   };
 
   let state = loadState();
@@ -95,6 +107,9 @@
   let calendarCursor = startOfMonth(new Date());
   let selectedDateKey = getDateKey(new Date());
   let toastTimer = 0;
+  let undoTimer = 0;
+  let pendingUndo = null;
+  let slackingActionLockedUntil = 0;
   let lastRenderedDate = selectedDateKey;
   let editingRecordDateKey = selectedDateKey;
   let bubbleDateKey = selectedDateKey;
@@ -117,6 +132,30 @@
 
   function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function cloneRecord(record) {
+    return JSON.parse(JSON.stringify(record));
+  }
+
+  function createRecordUndo(dateKey) {
+    const existed = Object.prototype.hasOwnProperty.call(state.records, dateKey);
+    const snapshot = existed ? cloneRecord(state.records[dateKey]) : null;
+    return () => {
+      if (existed) state.records[dateKey] = snapshot;
+      else delete state.records[dateKey];
+      saveState();
+      renderToday();
+      renderCalendar();
+      if (elements.recordEditDialog.open && editingRecordDateKey === dateKey) populateRecordEditor(dateKey);
+    };
+  }
+
+  function lockSlackingAction(duration = 450) {
+    const now = Date.now();
+    if (now < slackingActionLockedUntil) return false;
+    slackingActionLockedUntil = now + duration;
+    return true;
   }
 
   function loadSettings() {
@@ -215,12 +254,7 @@
 
   function formatClock(value) {
     if (!value) return "未打卡";
-    return new Intl.DateTimeFormat("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false
-    }).format(new Date(value));
+    return formatTimeInput(value) || "未打卡";
   }
 
   function formatDuration(totalMinutes) {
@@ -444,7 +478,8 @@
     const canMarkOvertime = record.clockIn && !record.clockOut && !record.overtimeOverride && target - now <= 30 * 60000;
     const canUndoAutoClockOut = record.clockOut && record.clockOutSource === "auto";
     elements.overtimeButton.hidden = !(canMarkOvertime || canUndoAutoClockOut);
-    elements.overtimeButton.textContent = canUndoAutoClockOut ? "其实还在加班" : "还在加班";
+    elements.overtimeButton.textContent = canUndoAutoClockOut ? "今天其实加班了" : "还在加班";
+    elements.countdown.hidden = Boolean(record.clockOut);
 
     if (rest) {
       elements.overline.textContent = "今天不用倒数";
@@ -453,9 +488,9 @@
       const imageIndex = hashDate(dateKey) % REST_IMAGES.length;
       setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "休息也是正经事");
     } else if (record.clockOut) {
-      elements.overline.textContent = "今日实际工作";
-      elements.heroTitle.textContent = "下班啦，辛苦了";
-      elements.countdown.setAttribute("aria-label", "扣除摸鱼后的实际工作时长");
+      elements.overline.textContent = "今天收工";
+      elements.heroTitle.textContent = "下班啦";
+      elements.countdown.setAttribute("aria-label", "今天已经下班");
       const imageIndex = hashDate(`${dateKey}-${record.clockOut}`) % REST_IMAGES.length;
       setCompanion(REST_IMAGES[imageIndex], "写着休字的可爱角色", "正式进入休息模式！");
     } else if (slacking) {
@@ -495,7 +530,16 @@
           ? "进行中"
           : "未开始";
     elements.statusValue.textContent = summaryStatus;
-    elements.slackingValue.textContent = rest ? "休息日" : formatCompactDuration(slackingMilliseconds / 60000);
+    elements.slackingSummaryLabel.textContent = slacking
+      ? "🐟 正在摸鱼"
+      : record.clockOut
+        ? "今天摸鱼"
+        : "今日摸鱼";
+    elements.slackingValue.textContent = rest
+      ? "休息日"
+      : slacking
+        ? formatStopwatch(slackingMilliseconds)
+        : formatCompactDuration(slackingMilliseconds / 60000);
     elements.durationValue.textContent = rest ? "休息日" : workedMinutes === null
       ? "等待记录"
       : formatCompactDuration(workedMinutes);
@@ -505,7 +549,9 @@
     elements.slackingButton.disabled = rest || !record.clockIn || Boolean(record.clockOut);
     elements.clockInLabel.textContent = "上班打卡";
     elements.clockInHint.textContent = record.clockIn ? formatClock(record.clockIn) : rest ? "休息日无需打卡" : "记录这一刻";
-    elements.clockOutHint.textContent = record.clockOut ? formatClock(record.clockOut) : !record.clockIn ? "上班后解锁" : `${plannedEndTime} 下班`;
+    elements.clockOutHint.textContent = record.clockOut
+      ? `${formatClock(record.clockOut)}${record.clockOutSource === "auto" ? " · 自动" : ""}`
+      : !record.clockIn ? "上班后解锁" : `${plannedEndTime} 下班`;
     elements.slackingLabel.textContent = slacking ? "结束摸鱼" : "开始摸鱼";
     elements.slackingHint.textContent = rest
       ? "休息日无需记录"
@@ -526,8 +572,11 @@
         : "开始摸鱼");
     elements.clockInButton.setAttribute("aria-label", record.clockIn ? `上班打卡时间 ${formatClock(record.clockIn)}；点击编辑` : "上班打卡");
     elements.clockOutButton.setAttribute("aria-label", record.clockOut
-      ? `下班打卡时间 ${formatClock(record.clockOut)}；点击编辑`
+      ? `下班打卡时间 ${formatClock(record.clockOut)}${record.clockOutSource === "auto" ? "，自动补卡" : ""}；点击编辑`
       : `下班打卡；当前计划 ${plannedEndTime} 下班`);
+
+    const bubbleCount = getBubbles(record).length;
+    elements.bubbleButtonCount.textContent = bubbleCount ? ` · ${bubbleCount}` : "";
 
   }
 
@@ -545,7 +594,7 @@
     delete target.workedMinutes;
     delete target.slackingSessions;
     saveState();
-    showToast(`上班打卡成功 · ${formatClock(target.clockIn)}`);
+    showToast(`今天 ${formatClock(target.clockIn)} 开始营业 ☕`);
     renderToday(now);
     renderCalendar();
   }
@@ -558,6 +607,10 @@
   function closeDialog(dialog) {
     if (typeof dialog.close === "function") dialog.close();
     else dialog.removeAttribute("open");
+    if (elements.toast.closest("dialog") === dialog) {
+      const remainingDialogs = [...document.querySelectorAll("dialog[open]")];
+      (remainingDialogs.at(-1) || document.body).append(elements.toast);
+    }
   }
 
   function appendSlackingRow(start = "", end = "") {
@@ -568,6 +621,7 @@
       <label>结束<input class="session-end" type="time" step="60" value="${end}"></label>
       <button class="session-delete" type="button" aria-label="删除这段摸鱼">删除</button>`;
     row.querySelector(".session-delete").addEventListener("click", () => {
+      if (!window.confirm("确定删除这段摸鱼记录吗？")) return;
       row.remove();
       elements.slackingEmpty.hidden = Boolean(elements.slackingSessionList.children.length);
     });
@@ -575,13 +629,8 @@
     elements.slackingEmpty.hidden = true;
   }
 
-  function openRecordEditor(dateKey = selectedDateKey, focusMode = "") {
-    editingRecordDateKey = dateKey;
+  function populateRecordEditor(dateKey) {
     const record = getRecord(dateKey);
-    const date = getDateFromKey(dateKey);
-    elements.recordEditDate.textContent = new Intl.DateTimeFormat("zh-CN", {
-      year: "numeric", month: "long", day: "numeric", weekday: "short"
-    }).format(date);
     elements.recordClockIn.value = formatTimeInput(record.clockIn);
     elements.recordClockOut.value = formatTimeInput(record.clockOut);
     elements.recordPlannedEnd.value = getPlannedEndTime(record);
@@ -592,9 +641,83 @@
       appendSlackingRow(formatTimeInput(session.start), formatTimeInput(session.end));
     });
     elements.slackingEmpty.hidden = Boolean(elements.slackingSessionList.children.length);
+    const until = record.clockOut ? new Date(record.clockOut) : new Date();
+    elements.quickSlackingTotal.textContent = `已记录 ${formatCompactDuration(calculateSlackingMilliseconds(record, until) / 60000)}`;
+  }
+
+  function openRecordEditor(dateKey = selectedDateKey, focusMode = "") {
+    editingRecordDateKey = dateKey;
+    const date = getDateFromKey(dateKey);
+    elements.recordEditDate.textContent = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric", month: "long", day: "numeric", weekday: "short"
+    }).format(date);
+    elements.preciseSlackingDetails.open = false;
+    elements.customSlackingRow.hidden = true;
+    elements.customSlackingMinutes.value = "";
+    populateRecordEditor(dateKey);
     showDialog(elements.recordEditDialog);
     if (focusMode === "clockIn") elements.recordClockIn.focus();
     if (focusMode === "clockOut") elements.recordClockOut.focus();
+  }
+
+  function findQuickSlackingSlot(record, dateKey, minutes, now = new Date()) {
+    if (!record.clockIn || record.restOverride === true || getActiveSlackingSession(record)) return null;
+    const clockIn = new Date(record.clockIn);
+    if (!Number.isFinite(clockIn.getTime())) return null;
+    const today = dateKey === getDateKey(now);
+    let limit = record.clockOut
+      ? new Date(record.clockOut)
+      : today
+        ? now
+        : getEndTarget(getDateFromKey(dateKey), getPlannedEndTime(record));
+    if (!Number.isFinite(limit.getTime()) || limit <= clockIn) return null;
+
+    const duration = minutes * 60000;
+    let candidateEnd = limit.getTime();
+    const sessions = getSlackingSessions(record)
+      .filter((session) => session?.start && session?.end)
+      .map((session) => ({ start: new Date(session.start).getTime(), end: new Date(session.end).getTime() }))
+      .filter((session) => Number.isFinite(session.start) && Number.isFinite(session.end))
+      .sort((a, b) => b.start - a.start);
+
+    for (const session of sessions) {
+      if (session.start >= candidateEnd || session.end <= clockIn.getTime()) continue;
+      if (candidateEnd - Math.max(session.end, clockIn.getTime()) >= duration) break;
+      candidateEnd = Math.min(candidateEnd, session.start);
+    }
+    if (candidateEnd - clockIn.getTime() < duration) return null;
+    return {
+      start: new Date(candidateEnd - duration).toISOString(),
+      end: new Date(candidateEnd).toISOString()
+    };
+  }
+
+  function addQuickSlacking(minutes) {
+    if (!lockSlackingAction()) return;
+    const safeMinutes = Math.floor(Number(minutes));
+    if (!Number.isFinite(safeMinutes) || safeMinutes < 1 || safeMinutes > 720) {
+      showToast("请输入 1～720 分钟");
+      return;
+    }
+    const dateKey = editingRecordDateKey;
+    const record = getRecord(dateKey);
+    if (!record.clockIn) return showToast("请先保存上班时间，再快速补摸鱼");
+    if (record.restOverride === true) return showToast("休息日不用补摸鱼");
+    if (getActiveSlackingSession(record)) return showToast("先结束正在进行的摸鱼吧");
+    const session = findQuickSlackingSlot(record, dateKey, safeMinutes);
+    if (!session) return showToast("这一天没有足够的空档可补这段摸鱼");
+
+    const undo = createRecordUndo(dateKey);
+    const target = ensureRecord(dateKey);
+    target.slackingSessions ||= [];
+    target.slackingSessions.push(session);
+    target.slackingSessions.sort((a, b) => new Date(a.start) - new Date(b.start));
+    if (target.clockOut) target.workedMinutes = calculateWorkedMinutes(target);
+    saveState();
+    populateRecordEditor(dateKey);
+    renderToday();
+    renderCalendar();
+    showToast(`已补摸鱼 ${safeMinutes} 分钟 🐟`, undo);
   }
 
   function deletePunchFromEditor(mode) {
@@ -762,6 +885,7 @@
         if (!target.bubbles.length) delete target.bubbles;
         saveState();
         renderBubbleList();
+        renderToday();
         renderCalendar();
       });
       actions.append(save, remove);
@@ -783,6 +907,7 @@
     saveState();
     elements.bubbleInput.value = "";
     renderBubbleList();
+    renderToday();
     renderCalendar();
     showToast("泡泡吹出去啦");
   }
@@ -834,19 +959,21 @@
   }
 
   function toggleSlacking() {
+    if (!lockSlackingAction()) return;
     const now = new Date();
     const { dateKey, record, rest } = getTodayContext(now);
     if (rest || !record.clockIn || record.clockOut) return;
+    const undo = createRecordUndo(dateKey);
     const target = ensureRecord(dateKey);
     const activeSession = getActiveSlackingSession(target);
 
     if (activeSession) {
       activeSession.end = now.toISOString();
-      showToast(`摸鱼结束 · 今日累计 ${formatCompactDuration(calculateSlackingMilliseconds(target, now) / 60000)}`);
+      showToast(`摸鱼结束 · 今日累计 ${formatCompactDuration(calculateSlackingMilliseconds(target, now) / 60000)}`, undo);
     } else {
       target.slackingSessions ||= [];
       target.slackingSessions.push({ start: now.toISOString() });
-      showToast("开始摸鱼，放松一下吧");
+      showToast("开始摸鱼 🐟", undo);
     }
 
     saveState();
@@ -872,11 +999,25 @@
     window.setTimeout(() => elements.celebrationLayer.replaceChildren(), 5000);
   }
 
-  function showToast(message) {
+  function showToast(message, undoAction = null) {
     window.clearTimeout(toastTimer);
-    elements.toast.textContent = message;
+    window.clearTimeout(undoTimer);
+    const openDialogs = [...document.querySelectorAll("dialog[open]")];
+    const activeDialog = openDialogs.at(-1);
+    const toastHost = activeDialog || document.body;
+    if (elements.toast.parentElement !== toastHost) toastHost.append(elements.toast);
+    pendingUndo = typeof undoAction === "function" ? undoAction : null;
+    elements.toastMessage.textContent = message;
+    elements.toastUndo.hidden = !pendingUndo;
     elements.toast.classList.add("is-visible");
-    toastTimer = window.setTimeout(() => elements.toast.classList.remove("is-visible"), 3000);
+    const visibleDuration = pendingUndo ? 7000 : 3000;
+    toastTimer = window.setTimeout(() => elements.toast.classList.remove("is-visible"), visibleDuration);
+    if (pendingUndo) {
+      undoTimer = window.setTimeout(() => {
+        pendingUndo = null;
+        elements.toastUndo.hidden = true;
+      }, 7000);
+    }
   }
 
   function getMonthWorkCount(date) {
@@ -958,7 +1099,7 @@
     let status = rest ? "休息日" : "没有记录";
     if (!rest && record.clockIn && !record.clockOut) status = record.overtimeOverride ? "加班中" : "进行中";
     if (!rest && record.clockOut) {
-      if (record.clockOutSource === "auto") status = "自动下班 · 自动补卡";
+      if (record.clockOutSource === "auto") status = "自动下班";
       else status = new Date(record.clockOut) > target ? "加班完成" : "正常下班";
     }
     elements.selectedDateStatus.textContent = status;
@@ -966,20 +1107,26 @@
     elements.selectedSlackingValue.textContent = rest ? "休息日" : formatCompactDuration(slacking);
     elements.selectedWorkedValue.textContent = rest ? "休息日" : worked === null ? "等待记录" : formatCompactDuration(worked);
     elements.selectedBubbleCount.textContent = `${getBubbles(record).length} 条`;
-    elements.toggleSelectedRest.textContent = rest ? "取消休息日" : "标记为休息日";
+    elements.toggleSelectedRest.textContent = rest ? "✓ 休息日" : "🌙 设为休息日";
     elements.toggleSelectedRest.setAttribute("aria-pressed", String(rest));
     elements.toggleSelectedRest.classList.toggle("is-active", rest);
+    const canUndoAuto = selectedDateKey === getDateKey(new Date())
+      && record.clockOutSource === "auto"
+      && Boolean(record.clockOut)
+      && !rest;
+    elements.selectedAutoOvertime.hidden = !canUndoAuto;
   }
 
   function toggleSelectedRest() {
     const record = ensureRecord(selectedDateKey);
+    const undo = createRecordUndo(selectedDateKey);
     if (record.restOverride === true) {
       delete record.restOverride;
       if (record.clockOut) record.workedMinutes = calculateWorkedMinutes(record);
       saveState();
       renderToday();
       renderCalendar();
-      showToast("已取消休息日");
+      showToast("已取消休息日", undo);
       return;
     }
 
@@ -988,7 +1135,7 @@
     saveState();
     renderToday();
     renderCalendar();
-    showToast("已标记为休息日");
+    showToast("已标记为休息日", undo);
   }
 
   function openCalendar() {
@@ -1090,11 +1237,28 @@
   elements.clearButton?.addEventListener("click", clearData);
   elements.editSelectedRecord?.addEventListener("click", () => openRecordEditor(selectedDateKey));
   elements.toggleSelectedRest?.addEventListener("click", toggleSelectedRest);
+  elements.selectedAutoOvertime?.addEventListener("click", toggleOvertimeOverride);
   elements.viewSelectedBubbles?.addEventListener("click", () => openBubbles(selectedDateKey));
   elements.closeRecordEdit?.addEventListener("click", () => closeDialog(elements.recordEditDialog));
   elements.cancelRecordEdit?.addEventListener("click", () => closeDialog(elements.recordEditDialog));
   elements.saveRecordEdit?.addEventListener("click", saveRecordEditor);
   elements.addSlackingSession?.addEventListener("click", () => appendSlackingRow());
+  elements.quickSlackingButtons.forEach((button) => {
+    button.addEventListener("click", () => addQuickSlacking(button.dataset.quickSlacking));
+  });
+  elements.showCustomSlacking?.addEventListener("click", () => {
+    elements.customSlackingRow.hidden = !elements.customSlackingRow.hidden;
+    if (!elements.customSlackingRow.hidden) elements.customSlackingMinutes.focus();
+  });
+  elements.addCustomSlacking?.addEventListener("click", () => {
+    addQuickSlacking(elements.customSlackingMinutes.value);
+    elements.customSlackingMinutes.value = "";
+  });
+  elements.customSlackingMinutes?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    elements.addCustomSlacking.click();
+  });
   elements.deleteClockIn?.addEventListener("click", () => deletePunchFromEditor("clockIn"));
   elements.deleteClockOut?.addEventListener("click", () => deletePunchFromEditor("clockOut"));
   elements.recordEditDialog?.addEventListener("click", (event) => {
@@ -1104,6 +1268,14 @@
   elements.addBubble?.addEventListener("click", addBubble);
   elements.bubbleDialog?.addEventListener("click", (event) => {
     if (event.target === elements.bubbleDialog) closeDialog(elements.bubbleDialog);
+  });
+  elements.toastUndo?.addEventListener("click", () => {
+    if (!pendingUndo) return;
+    const undo = pendingUndo;
+    pendingUndo = null;
+    window.clearTimeout(undoTimer);
+    undo();
+    showToast("已撤销刚刚的操作");
   });
 
   updateTheme(localStorage.getItem(THEME_KEY) || "minimal", false);

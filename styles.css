@@ -286,6 +286,10 @@ a:focus-visible {
   background: color-mix(in srgb, var(--blue) 18%, var(--surface-solid));
 }
 
+.bubble-button span {
+  font-weight: 750;
+}
+
 .overtime-button {
   margin-top: 15px;
   padding: 8px 13px;
@@ -326,6 +330,10 @@ h1 {
   align-items: center;
   width: min(560px, 100%);
   margin-top: 34px;
+}
+
+.countdown[hidden] {
+  display: none;
 }
 
 .time-block {
@@ -505,11 +513,16 @@ h1 {
 }
 
 .duration-cell strong {
-  color: var(--accent-ink);
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .slacking-cell strong {
   color: #52758a;
+}
+
+.slacking-cell {
+  background: color-mix(in srgb, var(--blue) 10%, var(--surface-solid)) !important;
 }
 
 .companion {
@@ -715,6 +728,99 @@ h1 {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+.quick-slacking {
+  margin-top: 22px;
+  padding: 17px;
+  border: 1px solid color-mix(in srgb, var(--blue) 46%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--blue) 12%, var(--surface-solid));
+}
+
+.quick-slacking .editor-section-title small {
+  color: #52758a;
+  font-size: 11px;
+}
+
+.quick-slacking-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.quick-slacking-actions button,
+.custom-slacking-row button {
+  min-height: 39px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--blue) 60%, var(--line));
+  border-radius: 12px;
+  color: #31566c;
+  background: var(--surface-solid);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quick-slacking-actions button:hover,
+.custom-slacking-row button:hover {
+  background: color-mix(in srgb, var(--blue) 24%, var(--surface-solid));
+}
+
+.custom-slacking-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.custom-slacking-row[hidden] {
+  display: none;
+}
+
+.custom-slacking-row label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.custom-slacking-row input {
+  width: 82px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--surface-solid);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.precise-slacking {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface-solid) 78%, var(--bg));
+}
+
+.precise-slacking > summary {
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.precise-slacking[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.precise-slacking .slacking-editor {
+  margin: 0;
+  padding: 16px;
+  border: 0;
 }
 
 .quiet-danger {
@@ -1094,10 +1200,16 @@ h1 {
 }
 
 .selected-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
   margin-top: 10px;
+}
+
+.selected-actions button {
+  min-height: 38px;
+  padding-inline: 7px;
+  white-space: nowrap;
 }
 
 .selected-actions button:first-child {
@@ -1116,6 +1228,23 @@ h1 {
   color: var(--accent-ink);
   border-style: solid;
   background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
+}
+
+.selected-auto-overtime {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  color: var(--accent-ink);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.selected-auto-overtime[hidden] {
+  display: none;
 }
 
 .selected-day span {
@@ -1184,6 +1313,9 @@ h1 {
   box-shadow: 0 15px 40px rgba(0,0,0,.2);
   font-size: 13px;
   opacity: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   pointer-events: none;
   transform: translate(-50%, 20px);
   transition: opacity 180ms ease, transform 220ms ease;
@@ -1191,7 +1323,23 @@ h1 {
 
 .toast.is-visible {
   opacity: 1;
+  pointer-events: auto;
   transform: translate(-50%, 0);
+}
+
+.toast button {
+  padding: 4px 0 4px 11px;
+  border: 0;
+  border-left: 1px solid rgba(255,255,255,.34);
+  color: #fff;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.toast button[hidden] {
+  display: none;
 }
 
 .load-error {
@@ -1256,6 +1404,10 @@ body.is-resting .time-block {
 
 body.is-complete .hero {
   border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+}
+
+body.is-complete .punch-panel {
+  margin-top: 28px;
 }
 
 body.is-overtime .time-block {
@@ -1437,11 +1589,11 @@ body.is-overtime .time-block {
     border-left: 0;
   }
 
-  .today-summary > div:nth-child(even) {
+  .today-summary > :nth-child(even) {
     border-left: 1px solid var(--line);
   }
 
-  .today-summary > div:nth-child(n + 3) {
+  .today-summary > :nth-child(n + 3) {
     border-top: 1px solid var(--line);
   }
 
@@ -1478,6 +1630,14 @@ body.is-overtime .time-block {
     grid-column: 1 / -1;
   }
 
+  .quick-slacking-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-slacking-actions button:last-child {
+    grid-column: 1 / -1;
+  }
+
   .session-row {
     grid-template-columns: 1fr 1fr;
   }
@@ -1501,15 +1661,30 @@ body.is-overtime .time-block {
   }
 
   .selected-day {
-    grid-template-columns: 64px 1fr;
+    grid-template-columns: 1fr;
+    padding: 14px;
   }
 
-  .selected-day img {
-    width: 64px;
+  .selected-day > img {
+    display: none;
+  }
+
+  .selected-actions button {
+    min-width: 0;
+    padding-inline: 4px;
+    font-size: 10px;
+    white-space: normal;
   }
 
   .data-actions .danger-button {
     margin-left: 0;
+  }
+
+  .toast {
+    bottom: 16px;
+    max-width: calc(100% - 24px);
+    border-radius: 18px;
+    white-space: nowrap;
   }
 }
 
