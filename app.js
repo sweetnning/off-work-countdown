@@ -60,6 +60,7 @@
     selectedWorkedValue: document.querySelector("#selectedWorkedValue"),
     selectedBubbleCount: document.querySelector("#selectedBubbleCount"),
     editSelectedRecord: document.querySelector("#editSelectedRecord"),
+    toggleSelectedRest: document.querySelector("#toggleSelectedRest"),
     viewSelectedBubbles: document.querySelector("#viewSelectedBubbles"),
     exportButton: document.querySelector("#exportButton"),
     importInput: document.querySelector("#importInput"),
@@ -97,6 +98,9 @@
   let lastRenderedDate = selectedDateKey;
   let editingRecordDateKey = selectedDateKey;
   let bubbleDateKey = selectedDateKey;
+  let companionRequestId = 0;
+  let companionTargetSrc = elements.companionImage?.getAttribute("src") || "";
+  const companionImageCache = new Map();
 
   function loadState() {
     try {
@@ -315,7 +319,7 @@
   function autoCloseEligibleRecords(now = new Date()) {
     let changed = false;
     Object.entries(state.records).forEach(([dateKey, record]) => {
-      if (!record?.clockIn || record.clockOut || record.overtimeOverride === true) return;
+      if (!record?.clockIn || record.clockOut || record.overtimeOverride === true || record.restOverride === true) return;
       const date = getDateFromKey(dateKey);
       if (!Number.isFinite(date.getTime())) return;
       const target = getEndTarget(date, getPlannedEndTime(record));
@@ -348,18 +352,65 @@
     if (persist) localStorage.setItem(THEME_KEY, nextTheme);
   }
 
-  function setCompanion(src, alt, speech) {
+  function preloadCompanionImage(src) {
+    if (companionImageCache.has(src)) return companionImageCache.get(src);
+    const promise = new Promise((resolve) => {
+      const image = new Image();
+      const finish = (loaded) => resolve(loaded);
+      image.addEventListener("load", () => finish(true), { once: true });
+      image.addEventListener("error", () => finish(false), { once: true });
+      image.src = src;
+      if (image.complete) finish(image.naturalWidth > 0);
+    });
+    companionImageCache.set(src, promise);
+    return promise;
+  }
+
+  function waitForCompanionFade() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        elements.companionImage.removeEventListener("transitionend", onTransitionEnd);
+        window.clearTimeout(fallbackTimer);
+        resolve();
+      };
+      const onTransitionEnd = (event) => {
+        if (event.propertyName === "opacity") finish();
+      };
+      const fallbackTimer = window.setTimeout(finish, 220);
+      elements.companionImage.addEventListener("transitionend", onTransitionEnd);
+    });
+  }
+
+  async function setCompanion(src, alt, speech) {
+    elements.speechBubble.textContent = speech;
+    if (companionTargetSrc === src) return;
+
+    companionTargetSrc = src;
+    const requestId = ++companionRequestId;
     if (elements.companionImage.getAttribute("src") === src) {
-      elements.speechBubble.textContent = speech;
+      elements.companionImage.alt = alt;
+      elements.stickerStage.dataset.companion = src.includes("slacking-fish") ? "slacking" : "default";
+      elements.stickerStage.classList.remove("is-changing");
       return;
     }
+
+    const loaded = await preloadCompanionImage(src);
+    if (!loaded || requestId !== companionRequestId) return;
+
     elements.stickerStage.classList.add("is-changing");
-    window.setTimeout(() => {
-      elements.companionImage.src = src;
-      elements.companionImage.alt = alt;
-      elements.speechBubble.textContent = speech;
-      elements.stickerStage.classList.remove("is-changing");
-    }, 170);
+    await waitForCompanionFade();
+    if (requestId !== companionRequestId) return;
+
+    elements.companionImage.src = src;
+    elements.companionImage.alt = alt;
+    elements.stickerStage.dataset.companion = src.includes("slacking-fish") ? "slacking" : "default";
+    window.requestAnimationFrame(() => {
+      if (requestId === companionRequestId) elements.stickerStage.classList.remove("is-changing");
+    });
   }
 
   function renderToday(now = new Date()) {
@@ -378,7 +429,7 @@
     const isOvertime = !rest && !record.clockOut && untilEnd <= 0;
     const slacking = isSlacking(record);
     const completedWork = calculateWorkedMilliseconds(record);
-    const displayedDuration = completedWork ?? (isOvertime ? Math.abs(untilEnd) : Math.max(0, untilEnd));
+    const displayedDuration = rest ? 0 : completedWork ?? (isOvertime ? Math.abs(untilEnd) : Math.max(0, untilEnd));
     const hours = Math.floor(displayedDuration / 3600000);
     const minutes = Math.floor((displayedDuration % 3600000) / 60000);
     const seconds = Math.floor((displayedDuration % 60000) / 1000);
@@ -444,8 +495,8 @@
           ? "进行中"
           : "未开始";
     elements.statusValue.textContent = summaryStatus;
-    elements.slackingValue.textContent = formatCompactDuration(slackingMilliseconds / 60000);
-    elements.durationValue.textContent = workedMinutes === null
+    elements.slackingValue.textContent = rest ? "休息日" : formatCompactDuration(slackingMilliseconds / 60000);
+    elements.durationValue.textContent = rest ? "休息日" : workedMinutes === null
       ? "等待记录"
       : formatCompactDuration(workedMinutes);
 
@@ -629,10 +680,12 @@
     try {
       const sessions = collectSlackingSessions(dateKey, clockIn, clockOut);
       const record = ensureRecord(dateKey);
+      const wasRestDayWithoutClockIn = record.restOverride === true && !record.clockIn;
       const previousClockOut = record.clockOut;
       const previousSource = record.clockOutSource;
       if (clockIn) record.clockIn = clockIn.toISOString();
       else delete record.clockIn;
+      if (clockIn && wasRestDayWithoutClockIn) delete record.restOverride;
       if (clockOut) {
         record.clockOut = clockOut.toISOString();
         const unchangedAutoTime = previousSource === "auto"
@@ -828,7 +881,9 @@
 
   function getMonthWorkCount(date) {
     const prefix = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    return Object.entries(state.records).filter(([key, record]) => key.startsWith(prefix) && record.clockIn).length;
+    return Object.entries(state.records).filter(([key, record]) => (
+      key.startsWith(prefix) && record.clockIn && record.restOverride !== true
+    )).length;
   }
 
   function renderCalendar() {
@@ -863,11 +918,11 @@
       button.append(number);
       button.dataset.date = dateKey;
       button.setAttribute("role", "gridcell");
-      button.setAttribute("aria-label", `${month + 1}月${day}日${record.clockIn ? "，已上班打卡" : rest ? "，休息日" : "，无记录"}`);
+      button.setAttribute("aria-label", `${month + 1}月${day}日${rest ? "，休息日" : record.clockIn ? "，已上班打卡" : "，无记录"}`);
       button.classList.toggle("is-today", dateKey === todayKey);
-      button.classList.toggle("is-worked", Boolean(record.clockIn));
-      button.classList.toggle("is-complete", Boolean(record.clockOut));
-      button.classList.toggle("is-rest", rest && !record.clockIn);
+      button.classList.toggle("is-worked", Boolean(record.clockIn) && !rest);
+      button.classList.toggle("is-complete", Boolean(record.clockOut) && !rest);
+      button.classList.toggle("is-rest", rest);
       button.classList.toggle("is-selected", dateKey === selectedDateKey);
       button.addEventListener("click", () => {
         selectedDateKey = dateKey;
@@ -892,23 +947,48 @@
     }).format(date);
 
     const until = record.clockOut ? new Date(record.clockOut) : new Date();
-    const slacking = calculateSlackingMilliseconds(record, until) / 60000;
-    const workedMilliseconds = calculateCurrentWorkedMilliseconds(record, new Date());
-    const worked = record.clockOut
-      ? (record.workedMinutes ?? calculateWorkedMinutes(record))
-      : workedMilliseconds === null ? null : workedMilliseconds / 60000;
+    const slacking = rest ? null : calculateSlackingMilliseconds(record, until) / 60000;
+    const workedMilliseconds = rest ? null : calculateCurrentWorkedMilliseconds(record, new Date());
+    const worked = rest
+      ? null
+      : record.clockOut
+        ? (record.workedMinutes ?? calculateWorkedMinutes(record))
+        : workedMilliseconds === null ? null : workedMilliseconds / 60000;
     const target = getEndTarget(date, getPlannedEndTime(record));
     let status = rest ? "休息日" : "没有记录";
-    if (record.clockIn && !record.clockOut) status = record.overtimeOverride ? "加班中" : "进行中";
-    if (record.clockOut) {
+    if (!rest && record.clockIn && !record.clockOut) status = record.overtimeOverride ? "加班中" : "进行中";
+    if (!rest && record.clockOut) {
       if (record.clockOutSource === "auto") status = "自动下班 · 自动补卡";
       else status = new Date(record.clockOut) > target ? "加班完成" : "正常下班";
     }
     elements.selectedDateStatus.textContent = status;
     elements.selectedDateTimes.textContent = `上班：${formatClock(record.clockIn)} · 下班：${formatClock(record.clockOut)}`;
-    elements.selectedSlackingValue.textContent = formatCompactDuration(slacking);
-    elements.selectedWorkedValue.textContent = worked === null ? "等待记录" : formatCompactDuration(worked);
+    elements.selectedSlackingValue.textContent = rest ? "休息日" : formatCompactDuration(slacking);
+    elements.selectedWorkedValue.textContent = rest ? "休息日" : worked === null ? "等待记录" : formatCompactDuration(worked);
     elements.selectedBubbleCount.textContent = `${getBubbles(record).length} 条`;
+    elements.toggleSelectedRest.textContent = rest ? "取消休息日" : "标记为休息日";
+    elements.toggleSelectedRest.setAttribute("aria-pressed", String(rest));
+    elements.toggleSelectedRest.classList.toggle("is-active", rest);
+  }
+
+  function toggleSelectedRest() {
+    const record = ensureRecord(selectedDateKey);
+    if (record.restOverride === true) {
+      delete record.restOverride;
+      if (record.clockOut) record.workedMinutes = calculateWorkedMinutes(record);
+      saveState();
+      renderToday();
+      renderCalendar();
+      showToast("已取消休息日");
+      return;
+    }
+
+    if ((record.clockIn || record.clockOut) && !window.confirm("这一天已经有打卡记录，标记为休息日后是否保留这些记录？")) return;
+    record.restOverride = true;
+    saveState();
+    renderToday();
+    renderCalendar();
+    showToast("已标记为休息日");
   }
 
   function openCalendar() {
@@ -1009,6 +1089,7 @@
   elements.importInput?.addEventListener("change", importData);
   elements.clearButton?.addEventListener("click", clearData);
   elements.editSelectedRecord?.addEventListener("click", () => openRecordEditor(selectedDateKey));
+  elements.toggleSelectedRest?.addEventListener("click", toggleSelectedRest);
   elements.viewSelectedBubbles?.addEventListener("click", () => openBubbles(selectedDateKey));
   elements.closeRecordEdit?.addEventListener("click", () => closeDialog(elements.recordEditDialog));
   elements.cancelRecordEdit?.addEventListener("click", () => closeDialog(elements.recordEditDialog));
@@ -1026,6 +1107,7 @@
   });
 
   updateTheme(localStorage.getItem(THEME_KEY) || "minimal", false);
+  ["assets/record-pencil.png", "assets/slacking-fish.png", ...REST_IMAGES].forEach(preloadCompanionImage);
   autoCloseEligibleRecords();
   renderToday();
   renderCalendar();

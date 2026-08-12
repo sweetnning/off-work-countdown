@@ -582,6 +582,7 @@ h1 {
   filter: saturate(0.96) contrast(1.02);
   animation: gentle-float 3.8s ease-in-out infinite;
   transition: opacity 180ms ease, transform 260ms ease;
+  background: transparent;
 }
 
 .sticker-stage.is-changing img {
@@ -1105,6 +1106,18 @@ h1 {
   background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
 }
 
+.selected-actions .rest-action {
+  color: var(--muted);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.selected-actions .rest-action.is-active {
+  color: var(--accent-ink);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
+}
+
 .selected-day span {
   color: var(--muted);
   font-size: 11px;
@@ -1249,11 +1262,11 @@ body.is-overtime .time-block {
   border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 
-body.is-slacking .sticker-stage {
+.sticker-stage[data-companion="slacking"] {
   background: color-mix(in srgb, var(--blue) 31%, var(--surface-solid));
 }
 
-body.is-slacking .sticker-stage img {
+.sticker-stage[data-companion="slacking"] img {
   width: 88%;
   max-height: 88%;
   mix-blend-mode: normal;

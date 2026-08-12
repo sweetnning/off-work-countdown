@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body data-theme="minimal">
   <!--
@@ -107,7 +107,7 @@
 
         <aside class="companion" aria-label="今日陪伴角色">
           <div class="speech-bubble" id="speechBubble">准备好就出发吧</div>
-          <div class="sticker-stage" id="stickerStage">
+          <div class="sticker-stage" id="stickerStage" data-companion="default">
             <span class="doodle doodle-star" aria-hidden="true">✦</span>
             <span class="doodle doodle-flower" aria-hidden="true">✿</span>
             <img id="companionImage" src="assets/record-pencil.png" alt="抱着铅笔记录的小动物">
@@ -153,6 +153,7 @@
           </div>
           <div class="selected-actions">
             <button id="editSelectedRecord" type="button">编辑当天记录</button>
+            <button class="rest-action" id="toggleSelectedRest" type="button" aria-pressed="false">标记为休息日</button>
             <button id="viewSelectedBubbles" type="button">查看泡泡</button>
           </div>
         </div>
@@ -236,6 +237,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>
