@@ -88,6 +88,7 @@
     addCustomSlacking: document.querySelector("#addCustomSlacking"),
     slackingSessionList: document.querySelector("#slackingSessionList"),
     slackingEmpty: document.querySelector("#slackingEmpty"),
+    recordSaveFeedback: document.querySelector("#recordSaveFeedback"),
     bubbleDialog: document.querySelector("#bubbleDialog"),
     closeBubble: document.querySelector("#closeBubble"),
     bubbleTitle: document.querySelector("#bubbleTitle"),
@@ -613,9 +614,11 @@
     }
   }
 
-  function appendSlackingRow(start = "", end = "") {
+  function appendSlackingRow(start = "", end = "", originalSession = null) {
     const row = document.createElement("div");
     row.className = "session-row";
+    if (originalSession?.start) row.dataset.originalStart = originalSession.start;
+    if (originalSession?.end) row.dataset.originalEnd = originalSession.end;
     row.innerHTML = `
       <label>开始<input class="session-start" type="time" step="60" value="${start}"></label>
       <label>结束<input class="session-end" type="time" step="60" value="${end}"></label>
@@ -638,7 +641,7 @@
     elements.deleteClockOut.hidden = !record.clockOut;
     elements.slackingSessionList.replaceChildren();
     getSlackingSessions(record).forEach((session) => {
-      appendSlackingRow(formatTimeInput(session.start), formatTimeInput(session.end));
+      appendSlackingRow(formatTimeInput(session.start), formatTimeInput(session.end), session);
     });
     elements.slackingEmpty.hidden = Boolean(elements.slackingSessionList.children.length);
     const until = record.clockOut ? new Date(record.clockOut) : new Date();
@@ -654,6 +657,7 @@
     elements.preciseSlackingDetails.open = false;
     elements.customSlackingRow.hidden = true;
     elements.customSlackingMinutes.value = "";
+    elements.recordSaveFeedback.hidden = true;
     populateRecordEditor(dateKey);
     showDialog(elements.recordEditDialog);
     if (focusMode === "clockIn") elements.recordClockIn.focus();
@@ -759,14 +763,28 @@
       const start = getDateTimeFromKey(dateKey, startValue);
       const end = endValue ? getDateTimeFromKey(dateKey, endValue) : null;
       if (!start || (endValue && !end)) throw new Error("请填写正确的摸鱼时间");
-      if (end && start >= end) throw new Error("摸鱼的结束时间要晚于开始时间");
+      let sessionStart = start;
+      let sessionEnd = end;
+      if (end && start.getTime() === end.getTime()) {
+        const originalStart = new Date(row.dataset.originalStart || "");
+        const originalEnd = new Date(row.dataset.originalEnd || "");
+        const unchangedShortSession = Number.isFinite(originalStart.getTime())
+          && Number.isFinite(originalEnd.getTime())
+          && originalEnd > originalStart
+          && formatTimeInput(originalStart) === startValue
+          && formatTimeInput(originalEnd) === endValue;
+        if (!unchangedShortSession) return null;
+        sessionStart = originalStart;
+        sessionEnd = originalEnd;
+      }
+      if (sessionEnd && sessionStart > sessionEnd) throw new Error("摸鱼的结束时间要晚于开始时间");
       if (!end && (dateKey !== todayKey || clockOut)) throw new Error("历史记录或已下班记录需要填写摸鱼结束时间");
-      const effectiveEnd = end || now;
-      if (clockIn && start < clockIn) throw new Error("摸鱼时间不能早于上班时间");
+      const effectiveEnd = sessionEnd || now;
+      if (clockIn && sessionStart < clockIn) throw new Error("摸鱼时间不能早于上班时间");
       if (clockOut && effectiveEnd > clockOut) throw new Error("摸鱼时间不能晚于下班时间");
       if (!clockOut && dateKey === todayKey && effectiveEnd > now) throw new Error("摸鱼结束时间不能晚于现在");
-      return { start: start.toISOString(), ...(end ? { end: end.toISOString() } : {}) };
-    }).sort((a, b) => new Date(a.start) - new Date(b.start));
+      return { start: sessionStart.toISOString(), ...(sessionEnd ? { end: sessionEnd.toISOString() } : {}) };
+    }).filter(Boolean).sort((a, b) => new Date(a.start) - new Date(b.start));
 
     for (let index = 1; index < sessions.length; index += 1) {
       const previousEnd = sessions[index - 1].end ? new Date(sessions[index - 1].end) : now;
@@ -776,28 +794,34 @@
   }
 
   function saveRecordEditor() {
+    elements.recordSaveFeedback.hidden = true;
+    const rejectSave = (message) => {
+      elements.recordSaveFeedback.textContent = message;
+      elements.recordSaveFeedback.hidden = false;
+      showToast(message);
+    };
     const now = new Date();
     const dateKey = editingRecordDateKey;
     if (getDateFromKey(dateKey) > new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
-      showToast("未来日期暂时不能补打卡");
+      rejectSave("未来日期暂时不能补打卡");
       return;
     }
     const clockIn = elements.recordClockIn.value ? getDateTimeFromKey(dateKey, elements.recordClockIn.value) : null;
     const clockOut = elements.recordClockOut.value ? getDateTimeFromKey(dateKey, elements.recordClockOut.value) : null;
     if (elements.recordClockIn.value && !clockIn || elements.recordClockOut.value && !clockOut) {
-      showToast("请填写正确的打卡时间");
+      rejectSave("请填写正确的打卡时间");
       return;
     }
     if (clockOut && !clockIn) {
-      showToast("请先补上班时间");
+      rejectSave("请先补上班时间");
       return;
     }
     if (clockIn && clockOut && clockOut <= clockIn) {
-      showToast("下班时间需要晚于上班时间");
+      rejectSave("下班时间需要晚于上班时间");
       return;
     }
     if (dateKey === getDateKey(now) && ((clockIn && clockIn > now) || (clockOut && clockOut > now))) {
-      showToast("今天的打卡时间不能晚于现在");
+      rejectSave("今天的打卡时间不能晚于现在");
       return;
     }
     try {
@@ -833,7 +857,7 @@
       renderCalendar();
       showToast("当天记录已保存");
     } catch (error) {
-      showToast(error.message || "记录没有保存，请检查时间");
+      rejectSave(error.message || "记录没有保存，请检查时间");
     }
   }
 

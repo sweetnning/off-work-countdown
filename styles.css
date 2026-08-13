@@ -918,6 +918,20 @@ h1 {
   margin-top: 24px;
 }
 
+.record-save-feedback {
+  margin: 16px 2px -10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #8f3f51;
+  background: #fff0f3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.record-save-feedback[hidden] {
+  display: none;
+}
+
 .editor-actions button,
 .blow-bubble-button {
   min-height: 45px;

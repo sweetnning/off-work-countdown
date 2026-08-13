@@ -7,7 +7,7 @@
   <meta name="description" content="一个可爱、清爽的下班倒计时与每日打卡网页。">
   <title>距离下班还有</title>
   <link rel="icon" href="assets/brand-pudding.png?v=6" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body data-theme="minimal">
   <!--
@@ -220,6 +220,7 @@
         </section>
       </details>
 
+      <p class="record-save-feedback" id="recordSaveFeedback" role="alert" hidden></p>
       <div class="editor-actions">
         <button id="cancelRecordEdit" type="button">取消</button>
         <button class="save-time-button" id="saveRecordEdit" type="button">保存当天记录</button>
@@ -262,6 +263,6 @@
       if (document.body.dataset.ready !== "true") document.querySelector("#loadError")?.removeAttribute("hidden");
     }, 4000);
   </script>
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>
